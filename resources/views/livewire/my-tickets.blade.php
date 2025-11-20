@@ -91,7 +91,7 @@ new class extends Component {
                             Open SnapScan Payment
                         </flux:link>
                         <flux:text class="text-xs text-blue-700 dark:text-blue-400 block">
-                            Click to open SnapScan. Use the <strong>Payment Code</strong> shown on each ticket as your payment reference.
+                            Click to open SnapScan. Use the <strong>Payment Reference</strong> shown on each ticket as your payment reference.
                         </flux:text>
                     </div>
 
@@ -119,7 +119,7 @@ new class extends Component {
                         <div class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-700">
                             <flux:text class="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase mb-1 block">Payment Reference:</flux:text>
                             <flux:text class="text-sm text-blue-900 dark:text-blue-200">
-                                Use the <strong>Payment Code</strong> shown on each unverified ticket as your payment reference.
+                                Use the <strong>Payment Reference</strong> shown on each unverified ticket as your payment reference.
                             </flux:text>
                         </div>
                     </div>
@@ -160,8 +160,8 @@ new class extends Component {
                     <!-- Ticket Details Grid -->
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <div class="space-y-1">
-                            <flux:text class="text-xs font-medium text-neutral-500 uppercase">Payment Code</flux:text>
-                            <flux:text class="text-base font-mono font-semibold">{{ $ticket->payment_code }}</flux:text>
+                            <flux:text class="text-xs font-medium text-neutral-500 uppercase">Payment Reference</flux:text>
+                            <flux:text class="text-base font-mono font-semibold">{{ $ticket->payment_ref }}</flux:text>
                         </div>
 
                         <div class="space-y-1">
@@ -225,7 +225,7 @@ new class extends Component {
                                 <div>
                                     <flux:text class="font-semibold text-yellow-800 dark:text-yellow-300 block mb-1">Payment Pending</flux:text>
                                     <flux:text class="text-sm text-yellow-800 dark:text-yellow-300">
-                                        This ticket is inactive until payment is verified. Use payment code <strong class="font-mono">{{ $ticket->payment_code }}</strong> in your SnapScan payment.
+                                        This ticket is inactive until payment is verified. Use payment reference <strong class="font-mono">{{ $ticket->payment_ref }}</strong> in your SnapScan payment.
                                     </flux:text>
                                 </div>
                             </div>

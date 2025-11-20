@@ -14,12 +14,12 @@ new class extends Component {
     public string $email = '';
     public string $dob = '';
     public string $ticketType = '';
-    public string $paymentCode = '';
+    public string $paymentRef = '';
     public string $qrCodeText = '';
     public string $qrCodeSvg = '';
     public string $lastSavedQrCodeText = '';
     public string $lastSavedQrCodeSvg = '';
-    public string $lastSavedPaymentCode = '';
+    public string $lastSavedPaymentRef = '';
 
     /**
      * Update QR code text when relevant fields change.
@@ -79,8 +79,8 @@ new class extends Component {
             $this->generateQrCode();
         }
 
-        // Generate payment code
-        $this->paymentCode = TicketIdGenerator::generatePaymentCode($this->holderName);
+        // Generate payment reference
+        $this->paymentRef = TicketIdGenerator::generatePaymentRef($this->holderName);
 
         // Check if ticket with this QR code already exists
         $existingTicket = Ticket::where('qr_code_text', $this->qrCodeText)->first();
@@ -89,13 +89,13 @@ new class extends Component {
             return;
         }
 
-        // Check if payment code already exists (retry if needed)
-        $existingPaymentCode = Ticket::where('payment_code', $this->paymentCode)->first();
-        if ($existingPaymentCode) {
-            $this->paymentCode = TicketIdGenerator::generatePaymentCode($this->holderName);
-            $existingPaymentCode = Ticket::where('payment_code', $this->paymentCode)->first();
-            if ($existingPaymentCode) {
-                $this->addError('paymentCode', 'Payment code conflict. Please try again.');
+        // Check if payment reference already exists (retry if needed)
+        $existingPaymentRef = Ticket::where('payment_ref', $this->paymentRef)->first();
+        if ($existingPaymentRef) {
+            $this->paymentRef = TicketIdGenerator::generatePaymentRef($this->holderName);
+            $existingPaymentRef = Ticket::where('payment_ref', $this->paymentRef)->first();
+            if ($existingPaymentRef) {
+                $this->addError('paymentRef', 'Payment reference conflict. Please try again.');
                 return;
             }
         }
@@ -111,20 +111,20 @@ new class extends Component {
             'email' => $this->email,
             'dob' => $this->dob,
             'ticket_type' => strtoupper($this->ticketType),
-            'payment_code' => $this->paymentCode,
+            'payment_ref' => $this->paymentRef,
             'is_verified' => false,
             'is_vip' => $isVip,
         ]);
 
-        // Store QR code and payment code before resetting
+        // Store QR code and payment reference before resetting
         $this->lastSavedQrCodeText = $this->qrCodeText;
         $this->lastSavedQrCodeSvg = $this->qrCodeSvg;
-        $this->lastSavedPaymentCode = $this->paymentCode;
+        $this->lastSavedPaymentRef = $this->paymentRef;
 
         // Reset form to allow creating another ticket
-        $this->reset(['holderName', 'email', 'dob', 'ticketType', 'qrCodeText', 'qrCodeSvg', 'paymentCode']);
+        $this->reset(['holderName', 'email', 'dob', 'ticketType', 'qrCodeText', 'qrCodeSvg', 'paymentRef']);
 
-        Session::flash('ticket-saved', 'Ticket created successfully! Payment code: ' . $this->lastSavedPaymentCode . ' - Please complete payment using the options below.');
+        Session::flash('ticket-saved', 'Ticket created successfully! Payment reference: ' . $this->lastSavedPaymentRef . ' - Please complete payment using the options below.');
     }
 
     /**
@@ -164,7 +164,7 @@ new class extends Component {
                 Open SnapScan Payment
             </flux:link>
             <flux:text class="text-xs text-green-700 dark:text-green-400 mt-2 block">
-                Click to open SnapScan and complete your payment. Use your Payment Code as the reference.
+                Click to open SnapScan and complete your payment. Use your Payment Reference as the reference.
             </flux:text>
         </div>
 
@@ -190,7 +190,7 @@ new class extends Component {
                 </div>
                 <div class="space-y-2 md:col-span-2">
                     <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Reference:</flux:text>
-                    <flux:text class="text-sm text-green-900 dark:text-green-200">Use your <strong>Payment Code</strong> (generated after ticket creation) as the payment reference</flux:text>
+                    <flux:text class="text-sm text-green-900 dark:text-green-200">Use your <strong>Payment Reference</strong> (generated after ticket creation) as the payment reference</flux:text>
                 </div>
             </div>
         </div>
@@ -282,7 +282,7 @@ new class extends Component {
     </div>
 
     <!-- Payment Instructions -->
-    @if (!empty($lastSavedPaymentCode))
+    @if (!empty($lastSavedPaymentRef))
         <div class="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-500 dark:border-blue-500 space-y-4">
             <div>
                 <flux:heading size="lg" class="text-blue-700 dark:text-blue-400">Payment Instructions</flux:heading>
@@ -292,25 +292,25 @@ new class extends Component {
             </div>
 
             <div class="p-4 bg-white dark:bg-neutral-800 rounded-lg border border-blue-200 dark:border-blue-700">
-                <flux:text class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Your Payment Code:</flux:text>
-                <flux:text class="text-2xl font-mono font-bold text-blue-700 dark:text-blue-400">{{ $lastSavedPaymentCode }}</flux:text>
+                <flux:text class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Your Payment Reference:</flux:text>
+                <flux:text class="text-2xl font-mono font-bold text-blue-700 dark:text-blue-400">{{ $lastSavedPaymentRef }}</flux:text>
             </div>
 
             <div class="space-y-2">
                 <flux:text class="font-semibold text-blue-900 dark:text-blue-300">Payment Methods:</flux:text>
                 <ul class="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-300">
                     <li><strong>SnapScan:</strong> You will be redirected to SnapScan after ticket creation</li>
-                    <li><strong>Bank Transfer:</strong> Use payment code <strong>{{ $lastSavedPaymentCode }}</strong> as your reference</li>
+                    <li><strong>Bank Transfer:</strong> Use payment reference <strong>{{ $lastSavedPaymentRef }}</strong> as your reference</li>
                 </ul>
             </div>
 
             <div class="space-y-2">
                 <flux:text class="font-semibold text-blue-900 dark:text-blue-300">Important:</flux:text>
                 <ul class="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-300">
-                    <li>Always use <strong>{{ $lastSavedPaymentCode }}</strong> as your payment reference</li>
+                    <li>Always use <strong>{{ $lastSavedPaymentRef }}</strong> as your payment reference</li>
                     <li>Your ticket will be activated after admin verifies your payment</li>
                     <li>You will receive an email notification once payment is confirmed</li>
-                    <li>Do not share your payment code with others</li>
+                    <li>Do not share your payment reference with others</li>
                 </ul>
             </div>
 

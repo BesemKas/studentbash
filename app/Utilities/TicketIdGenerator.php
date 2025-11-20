@@ -37,12 +37,12 @@ class TicketIdGenerator
     }
 
     /**
-     * Generate a payment code in the format: P-{INITIALS}-{RANDOM}
+     * Generate a payment reference in the format: P-{INITIALS}-{RANDOM}
      * 
      * Example: P-KL-8592
      * Example: P-JMD-1234
      */
-    public static function generatePaymentCode(string $holderName): string
+    public static function generatePaymentRef(string $holderName): string
     {
         $initials = self::extractInitials($holderName);
         $random = self::generateRandomDigits(4);

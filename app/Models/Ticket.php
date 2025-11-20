@@ -14,7 +14,6 @@ class Ticket extends Model
         'email',
         'dob',
         'ticket_type',
-        'payment_code',
         'payment_ref',
         'is_verified',
         'is_vip',

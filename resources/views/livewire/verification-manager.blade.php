@@ -10,11 +10,8 @@ use Livewire\WithPagination;
 new class extends Component {
     use WithPagination;
 
-    public string $searchPaymentCode = '';
     public string $searchPaymentRef = '';
     public ?Ticket $foundTicket = null;
-    public string $editPaymentRef = '';
-    public bool $editingPaymentRef = false;
     public string $filterStatus = 'all';
     public string $sortBy = 'created_at';
     public string $sortDirection = 'desc';
@@ -25,20 +22,6 @@ new class extends Component {
     public function mount(): void
     {
         // Component uses computed properties, no initialization needed
-    }
-
-    /**
-     * Search for ticket by payment code.
-     */
-    public function searchPaymentCode(): void
-    {
-        $this->reset(['foundTicket']);
-
-        if (empty($this->searchPaymentCode)) {
-            return;
-        }
-
-        $this->foundTicket = Ticket::where('payment_code', trim($this->searchPaymentCode))->first();
     }
 
     /**
@@ -53,46 +36,6 @@ new class extends Component {
         }
 
         $this->foundTicket = Ticket::where('payment_ref', 'like', '%' . trim($this->searchPaymentRef) . '%')->first();
-    }
-
-    /**
-     * Start editing payment reference.
-     */
-    public function startEditingPaymentRef(): void
-    {
-        if ($this->foundTicket) {
-            $this->editPaymentRef = $this->foundTicket->payment_ref ?? '';
-            $this->editingPaymentRef = true;
-        }
-    }
-
-    /**
-     * Save payment reference.
-     */
-    public function savePaymentRef(): void
-    {
-        if (!$this->foundTicket) {
-            return;
-        }
-
-        $this->foundTicket->update([
-            'payment_ref' => trim($this->editPaymentRef),
-        ]);
-
-        $this->foundTicket->refresh();
-        $this->editingPaymentRef = false;
-        $this->editPaymentRef = '';
-
-        Session::flash('payment-ref-updated', 'Payment reference updated successfully!');
-    }
-
-    /**
-     * Cancel editing payment reference.
-     */
-    public function cancelEditingPaymentRef(): void
-    {
-        $this->editingPaymentRef = false;
-        $this->editPaymentRef = '';
     }
 
     /**
@@ -198,36 +141,19 @@ new class extends Component {
     <!-- Search Section -->
     <div class="p-6 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 space-y-4">
         <flux:heading size="lg">Search Tickets</flux:heading>
-        <div class="grid gap-4 md:grid-cols-2">
-            <div class="flex gap-4">
-                <flux:input
-                    wire:model="searchPaymentCode"
-                    wire:keydown.enter="searchPaymentCode"
-                    label="Payment Code"
-                    type="text"
-                    placeholder="Enter payment code (e.g., P-KL-8592)"
-                    class="flex-1"
-                />
-                <div class="flex items-end">
-                    <flux:button wire:click="searchPaymentCode" variant="primary">
-                        Search
-                    </flux:button>
-                </div>
-            </div>
-            <div class="flex gap-4">
-                <flux:input
-                    wire:model="searchPaymentRef"
-                    wire:keydown.enter="searchPaymentRef"
-                    label="Payment Reference (SnapScan)"
-                    type="text"
-                    placeholder="Enter payment reference from statement"
-                    class="flex-1"
-                />
-                <div class="flex items-end">
-                    <flux:button wire:click="searchPaymentRef" variant="primary">
-                        Search
-                    </flux:button>
-                </div>
+        <div class="flex gap-4">
+            <flux:input
+                wire:model="searchPaymentRef"
+                wire:keydown.enter="searchPaymentRef"
+                label="Payment Reference"
+                type="text"
+                placeholder="Enter payment reference (e.g., P-KL-8592)"
+                class="flex-1"
+            />
+            <div class="flex items-end">
+                <flux:button wire:click="searchPaymentRef" variant="primary">
+                    Search
+                </flux:button>
             </div>
         </div>
 
@@ -243,38 +169,12 @@ new class extends Component {
                         <flux:text class="font-semibold">{{ $foundTicket->ticket_type }}</flux:text>
                     </div>
                     <div>
-                        <flux:text class="text-sm text-neutral-500">Payment Code</flux:text>
-                        <flux:text class="font-semibold font-mono">{{ $foundTicket->payment_code }}</flux:text>
+                        <flux:text class="text-sm text-neutral-500">Payment Reference</flux:text>
+                        <flux:text class="font-semibold font-mono text-lg">{{ $foundTicket->payment_ref }}</flux:text>
                     </div>
                     <div>
                         <flux:text class="text-sm text-neutral-500">Email</flux:text>
                         <flux:text class="font-semibold">{{ $foundTicket->email ?: 'Not provided' }}</flux:text>
-                    </div>
-                    <div class="md:col-span-2">
-                        <flux:text class="text-sm text-neutral-500 mb-2">Payment Reference (SnapScan)</flux:text>
-                        @if ($editingPaymentRef)
-                            <div class="flex gap-2">
-                                <flux:input
-                                    wire:model="editPaymentRef"
-                                    type="text"
-                                    placeholder="Enter payment reference from SnapScan statement"
-                                    class="flex-1"
-                                />
-                                <flux:button wire:click="savePaymentRef" variant="primary" size="sm">
-                                    Save
-                                </flux:button>
-                                <flux:button wire:click="cancelEditingPaymentRef" variant="ghost" size="sm">
-                                    Cancel
-                                </flux:button>
-                            </div>
-                        @else
-                            <div class="flex items-center gap-2">
-                                <flux:text class="font-semibold font-mono text-lg">{{ $foundTicket->payment_ref ?: 'Not provided' }}</flux:text>
-                                <flux:button wire:click="startEditingPaymentRef" variant="ghost" size="sm">
-                                    Edit
-                                </flux:button>
-                            </div>
-                        @endif
                     </div>
                     <div>
                         <flux:text class="text-sm text-neutral-500">Date of Birth</flux:text>
@@ -309,10 +209,6 @@ new class extends Component {
                     </flux:button>
                 </div>
             </div>
-        @elseif (!empty($searchPaymentCode))
-            <div class="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
-                <flux:text class="text-yellow-800 dark:text-yellow-300">No ticket found with payment code: {{ $searchPaymentCode }}</flux:text>
-            </div>
         @elseif (!empty($searchPaymentRef))
             <div class="mt-4 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
                 <flux:text class="text-yellow-800 dark:text-yellow-300">No ticket found with payment reference: {{ $searchPaymentRef }}</flux:text>
@@ -328,7 +224,6 @@ new class extends Component {
                 <table class="min-w-full divide-y divide-neutral-200 dark:divide-neutral-700">
                     <thead class="bg-neutral-50 dark:bg-neutral-900">
                         <tr>
-                            <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Payment Code</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Payment Reference</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Holder Name</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Email</th>
@@ -340,8 +235,7 @@ new class extends Component {
                     <tbody class="divide-y divide-neutral-200 dark:divide-neutral-700">
                         @foreach ($this->unverifiedQueue as $ticket)
                             <tr class="hover:bg-neutral-50 dark:hover:bg-neutral-900">
-                                <td class="px-4 py-3 text-sm font-mono">{{ $ticket->payment_code }}</td>
-                                <td class="px-4 py-3 text-sm font-mono font-semibold">{{ $ticket->payment_ref ?: '-' }}</td>
+                                <td class="px-4 py-3 text-sm font-mono font-semibold">{{ $ticket->payment_ref }}</td>
                                 <td class="px-4 py-3 text-sm">{{ $ticket->holder_name }}</td>
                                 <td class="px-4 py-3 text-sm">{{ $ticket->email ?: '-' }}</td>
                                 <td class="px-4 py-3 text-sm">{{ $ticket->ticket_type }}</td>
@@ -380,9 +274,9 @@ new class extends Component {
             <table class="min-w-full divide-y divide-neutral-200 dark:divide-neutral-700">
                 <thead class="bg-neutral-50 dark:bg-neutral-900">
                     <tr>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase cursor-pointer" wire:click="updateSort('payment_code')">
-                            Payment Code
-                            @if ($sortBy === 'payment_code')
+                        <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase cursor-pointer" wire:click="updateSort('payment_ref')">
+                            Payment Reference
+                            @if ($sortBy === 'payment_ref')
                                 {{ $sortDirection === 'asc' ? '↑' : '↓' }}
                             @endif
                         </th>
@@ -413,8 +307,7 @@ new class extends Component {
                 <tbody class="divide-y divide-neutral-200 dark:divide-neutral-700">
                     @forelse ($this->tickets as $ticket)
                         <tr class="hover:bg-neutral-50 dark:hover:bg-neutral-900">
-                            <td class="px-4 py-3 text-sm font-mono">{{ $ticket->payment_code }}</td>
-                            <td class="px-4 py-3 text-sm font-mono font-semibold">{{ $ticket->payment_ref ?: '-' }}</td>
+                            <td class="px-4 py-3 text-sm font-mono font-semibold">{{ $ticket->payment_ref }}</td>
                             <td class="px-4 py-3 text-sm">{{ $ticket->holder_name }}</td>
                             <td class="px-4 py-3 text-sm">{{ $ticket->email ?: '-' }}</td>
                             <td class="px-4 py-3 text-sm">{{ $ticket->ticket_type }}</td>
@@ -442,7 +335,7 @@ new class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-4 py-8 text-center text-neutral-500">
+                            <td colspan="7" class="px-4 py-8 text-center text-neutral-500">
                                 No tickets found.
                             </td>
                         </tr>

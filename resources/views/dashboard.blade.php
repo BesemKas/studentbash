@@ -100,7 +100,7 @@
                             <tbody class="divide-y divide-neutral-200 dark:divide-neutral-700">
                                 @foreach($unverifiedTickets as $ticket)
                                     <tr>
-                                        <td class="px-4 py-3 text-sm font-mono">{{ $ticket->payment_code }}</td>
+                                        <td class="px-4 py-3 text-sm font-mono">{{ $ticket->payment_ref }}</td>
                                         <td class="px-4 py-3 text-sm">{{ $ticket->holder_name }}</td>
                                         <td class="px-4 py-3 text-sm">{{ $ticket->ticket_type }}</td>
                                         <td class="px-4 py-3 text-sm">{{ $ticket->created_at->format('Y-m-d H:i') }}</td>

@@ -176,7 +176,7 @@ new class extends Component {
 
                     <div>
                         <flux:text class="text-sm text-neutral-500">Payment Reference</flux:text>
-                        <flux:text class="font-semibold">{{ $foundTicket->payment_ref ?: 'Not provided' }}</flux:text>
+                        <flux:text class="font-semibold font-mono">{{ $foundTicket->payment_ref }}</flux:text>
                     </div>
 
                     <div>
