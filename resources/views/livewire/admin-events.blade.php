@@ -96,12 +96,12 @@ new class extends Component {
 }; ?>
 
 <section class="w-full space-y-6">
-    <div class="flex items-center justify-between">
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
             <flux:heading size="xl">Event Management</flux:heading>
             <flux:text class="mt-2">Create and manage events with dates and ticket types</flux:text>
         </div>
-        <flux:button wire:click="createEvent" variant="primary">
+        <flux:button wire:click="createEvent" variant="primary" type="button">
             Create Event
         </flux:button>
     </div>
@@ -138,7 +138,7 @@ new class extends Component {
                     required
                 />
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <flux:input
                         wire:model="start_date"
                         type="date"
@@ -160,11 +160,11 @@ new class extends Component {
                     description="Active events can be used for ticket generation"
                 />
 
-                <div class="flex gap-4">
+                <div class="flex flex-col sm:flex-row gap-4">
                     <flux:button type="submit" variant="primary" class="flex-1">
                         {{ $editingEvent ? 'Update Event' : 'Create Event' }}
                     </flux:button>
-                    <flux:button wire:click="resetForm" variant="ghost">
+                    <flux:button wire:click="resetForm" variant="ghost" type="button">
                         Cancel
                     </flux:button>
                 </div>
@@ -209,11 +209,12 @@ new class extends Component {
                                 @endif
                             </td>
                             <td class="px-4 py-3 text-sm">
-                                <div class="flex gap-2">
+                                <div class="flex flex-wrap gap-2">
                                     <flux:button
                                         wire:click="editEvent({{ $event->id }})"
                                         variant="ghost"
                                         size="sm"
+                                        type="button"
                                     >
                                         Edit
                                     </flux:button>
@@ -227,6 +228,7 @@ new class extends Component {
                                         wire:confirm="Are you sure you want to delete this event? This will also delete all associated ticket types and dates."
                                         variant="danger"
                                         size="sm"
+                                        type="button"
                                     >
                                         Delete
                                     </flux:button>
