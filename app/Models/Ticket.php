@@ -11,6 +11,7 @@ class Ticket extends Model
         'user_id',
         'qr_code_text',
         'holder_name',
+        'email',
         'dob',
         'ticket_type',
         'payment_code',

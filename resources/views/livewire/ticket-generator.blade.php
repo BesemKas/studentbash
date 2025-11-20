@@ -11,6 +11,7 @@ use Livewire\Volt\Component;
 
 new class extends Component {
     public string $holderName = '';
+    public string $email = '';
     public string $dob = '';
     public string $ticketType = '';
     public string $paymentCode = '';
@@ -65,6 +66,7 @@ new class extends Component {
     {
         $validated = $this->validate([
             'holderName' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255'],
             'dob' => ['required', 'date', 'date_format:Y-m-d'],
             'ticketType' => ['required', 'string', 'in:VIP,FULL,D4,D5,D6'],
         ]);
@@ -103,6 +105,7 @@ new class extends Component {
             'user_id' => auth()->id(),
             'qr_code_text' => $this->qrCodeText,
             'holder_name' => $this->holderName,
+            'email' => $this->email,
             'dob' => $this->dob,
             'ticket_type' => strtoupper($this->ticketType),
             'payment_code' => $this->paymentCode,
@@ -137,6 +140,14 @@ new class extends Component {
                     required
                     autofocus
                     placeholder="John Michael Doe"
+                />
+
+                <flux:input
+                    wire:model="email"
+                    label="Email Address"
+                    type="email"
+                    required
+                    placeholder="holder@example.com"
                 />
 
                 <flux:input
