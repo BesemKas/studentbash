@@ -17,6 +17,9 @@ new class extends Component {
     public string $paymentCode = '';
     public string $qrCodeText = '';
     public string $qrCodeSvg = '';
+    public string $lastSavedQrCodeText = '';
+    public string $lastSavedQrCodeSvg = '';
+    public string $lastSavedPaymentCode = '';
 
     /**
      * Update QR code text when relevant fields change.
@@ -113,9 +116,23 @@ new class extends Component {
             'is_vip' => $isVip,
         ]);
 
-        Session::flash('ticket-saved', 'Ticket created successfully! Your ticket is pending payment verification.');
+        // Store QR code and payment code before resetting
+        $this->lastSavedQrCodeText = $this->qrCodeText;
+        $this->lastSavedQrCodeSvg = $this->qrCodeSvg;
+        $this->lastSavedPaymentCode = $this->paymentCode;
 
-        // Don't reset form - show payment code and instructions
+        // Reset form to allow creating another ticket
+        $this->reset(['holderName', 'email', 'dob', 'ticketType', 'qrCodeText', 'qrCodeSvg', 'paymentCode']);
+
+        Session::flash('ticket-saved', 'Ticket created successfully! Payment code: ' . $this->lastSavedPaymentCode . ' - Please complete payment using the options below.');
+    }
+
+    /**
+     * Get SnapScan payment URL
+     */
+    public function getSnapscanUrlProperty(): string
+    {
+        return env('SNAPSCAN_PAYMENT_URL', 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ');
     }
 }; ?>
 
@@ -128,6 +145,56 @@ new class extends Component {
     @if (session('ticket-saved'))
         <flux:callout variant="success" icon="check-circle" heading="{{ session('ticket-saved') }}" />
     @endif
+
+    <!-- Payment Options Section -->
+    <div class="p-6 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700 space-y-6">
+        <flux:heading size="lg" class="text-green-700 dark:text-green-400">Payment Options</flux:heading>
+        
+        <!-- SnapScan Payment -->
+        <div class="p-4 bg-white dark:bg-neutral-800 rounded-lg border border-green-200 dark:border-green-700">
+            <flux:text class="text-sm font-semibold text-green-900 dark:text-green-300 mb-2 block">Pay with SnapScan:</flux:text>
+                        <flux:link 
+                            href="{{ $this->snapscanUrl }}" 
+                            variant="primary"
+                            class="inline-flex items-center gap-2"
+                        >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+                Open SnapScan Payment
+            </flux:link>
+            <flux:text class="text-xs text-green-700 dark:text-green-400 mt-2 block">
+                Click to open SnapScan and complete your payment. Use your Payment Code as the reference.
+            </flux:text>
+        </div>
+
+        <!-- Banking Details -->
+        <div>
+            <flux:text class="text-sm font-semibold text-green-900 dark:text-green-300 mb-3 block">Or pay via Bank Transfer:</flux:text>
+            <div class="grid gap-4 md:grid-cols-2">
+                <div class="space-y-2">
+                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Bank Name:</flux:text>
+                    <flux:text class="text-base text-green-900 dark:text-green-200">{{ env('BANK_NAME', 'Standard Bank') }}</flux:text>
+                </div>
+                <div class="space-y-2">
+                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Account Holder:</flux:text>
+                    <flux:text class="text-base text-green-900 dark:text-green-200">{{ env('BANK_ACCOUNT_HOLDER', 'Student Bash') }}</flux:text>
+                </div>
+                <div class="space-y-2">
+                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Account Number:</flux:text>
+                    <flux:text class="text-base font-mono text-green-900 dark:text-green-200">{{ env('BANK_ACCOUNT_NUMBER', '1234567890') }}</flux:text>
+                </div>
+                <div class="space-y-2">
+                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Branch Code:</flux:text>
+                    <flux:text class="text-base text-green-900 dark:text-green-200">{{ env('BANK_BRANCH_CODE', '051001') }}</flux:text>
+                </div>
+                <div class="space-y-2 md:col-span-2">
+                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Reference:</flux:text>
+                    <flux:text class="text-sm text-green-900 dark:text-green-200">Use your <strong>Payment Code</strong> (generated after ticket creation) as the payment reference</flux:text>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <div class="grid gap-6 md:grid-cols-2">
         <!-- Form Section -->
@@ -181,31 +248,41 @@ new class extends Component {
         <div class="space-y-4">
             <div>
                 <flux:heading size="lg">QR Code</flux:heading>
-                <flux:text class="mt-2">Ticket ID: {{ $qrCodeText ?: 'Fill in the form to generate' }}</flux:text>
+                @if (!empty($lastSavedQrCodeText))
+                    <flux:text class="mt-2">Last Saved Ticket ID: {{ $lastSavedQrCodeText }}</flux:text>
+                @else
+                    <flux:text class="mt-2">Ticket ID: {{ $qrCodeText ?: 'Fill in the form to generate' }}</flux:text>
+                @endif
             </div>
 
-            @if (!empty($qrCodeSvg))
+            @if (!empty($lastSavedQrCodeSvg))
+                <div class="flex justify-center p-6 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <div class="w-full max-w-xs">
+                        {!! $lastSavedQrCodeSvg !!}
+                    </div>
+                </div>
+                <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <flux:text class="text-xs font-mono break-all">{{ $lastSavedQrCodeText }}</flux:text>
+                </div>
+            @elseif (!empty($qrCodeSvg))
                 <div class="flex justify-center p-6 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
                     <div class="w-full max-w-xs">
                         {!! $qrCodeSvg !!}
                     </div>
+                </div>
+                <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <flux:text class="text-xs font-mono break-all">{{ $qrCodeText }}</flux:text>
                 </div>
             @else
                 <div class="flex items-center justify-center h-64 bg-neutral-100 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
                     <flux:text class="text-neutral-500">QR code will appear here</flux:text>
                 </div>
             @endif
-
-            @if (!empty($qrCodeText))
-                <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <flux:text class="text-xs font-mono break-all">{{ $qrCodeText }}</flux:text>
-                </div>
-            @endif
         </div>
     </div>
 
     <!-- Payment Instructions -->
-    @if (!empty($paymentCode))
+    @if (!empty($lastSavedPaymentCode))
         <div class="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-500 dark:border-blue-500 space-y-4">
             <div>
                 <flux:heading size="lg" class="text-blue-700 dark:text-blue-400">Payment Instructions</flux:heading>
@@ -216,28 +293,27 @@ new class extends Component {
 
             <div class="p-4 bg-white dark:bg-neutral-800 rounded-lg border border-blue-200 dark:border-blue-700">
                 <flux:text class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Your Payment Code:</flux:text>
-                <flux:text class="text-2xl font-mono font-bold text-blue-700 dark:text-blue-400">{{ $paymentCode }}</flux:text>
+                <flux:text class="text-2xl font-mono font-bold text-blue-700 dark:text-blue-400">{{ $lastSavedPaymentCode }}</flux:text>
+            </div>
+
+            <div class="space-y-2">
+                <flux:text class="font-semibold text-blue-900 dark:text-blue-300">Payment Methods:</flux:text>
+                <ul class="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-300">
+                    <li><strong>SnapScan:</strong> You will be redirected to SnapScan after ticket creation</li>
+                    <li><strong>Bank Transfer:</strong> Use payment code <strong>{{ $lastSavedPaymentCode }}</strong> as your reference</li>
+                </ul>
             </div>
 
             <div class="space-y-2">
                 <flux:text class="font-semibold text-blue-900 dark:text-blue-300">Important:</flux:text>
                 <ul class="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-300">
-                    <li>Use <strong>{{ $paymentCode }}</strong> as your SnapScan payment reference</li>
+                    <li>Always use <strong>{{ $lastSavedPaymentCode }}</strong> as your payment reference</li>
                     <li>Your ticket will be activated after admin verifies your payment</li>
-                    <li>You will receive your QR code ticket once payment is confirmed</li>
+                    <li>You will receive an email notification once payment is confirmed</li>
                     <li>Do not share your payment code with others</li>
                 </ul>
             </div>
 
-            <div class="pt-4 border-t border-blue-200 dark:border-blue-700">
-                <flux:button 
-                    wire:click="$set('paymentCode', '')" 
-                    variant="ghost" 
-                    class="w-full"
-                >
-                    Generate New Ticket
-                </flux:button>
-            </div>
         </div>
     @endif
 </section>
