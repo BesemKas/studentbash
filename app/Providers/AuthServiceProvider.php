@@ -20,14 +20,7 @@ class AuthServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Gate for staff and admin access (gate validation)
-        Gate::define('gate-access', function ($user) {
-            return $user->isAdminOrStaff();
-        });
-
-        // Gate for admin-only access (payment verification)
-        Gate::define('admin-access', function ($user) {
-            return $user->isAdmin();
-        });
+        // Spatie Laravel Permission handles role-based authorization
+        // Use 'role:admin' middleware in routes instead of custom gates
     }
 }

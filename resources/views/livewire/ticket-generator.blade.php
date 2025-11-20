@@ -100,6 +100,7 @@ new class extends Component {
 
         // Create ticket with is_verified = false (default)
         Ticket::create([
+            'user_id' => auth()->id(),
             'qr_code_text' => $this->qrCodeText,
             'holder_name' => $this->holderName,
             'dob' => $this->dob,

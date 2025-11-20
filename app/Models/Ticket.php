@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Ticket extends Model
 {
     protected $fillable = [
+        'user_id',
         'qr_code_text',
         'holder_name',
         'dob',
@@ -28,4 +30,12 @@ class Ticket extends Model
         'd6_used' => 'boolean',
         'dob' => 'date',
     ];
+
+    /**
+     * Get the user that owns the ticket
+     */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 }
