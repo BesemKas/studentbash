@@ -17,7 +17,10 @@ class EventFactory extends Factory
     public function definition(): array
     {
         $startDate = fake()->dateTimeBetween('now', '+6 months');
-        $endDate = fake()->dateTimeBetween($startDate, '+10 days');
+        // End date should be 1-10 days after start date
+        $daysToAdd = fake()->numberBetween(1, 10);
+        $endDate = clone $startDate;
+        $endDate->modify("+{$daysToAdd} days");
 
         return [
             'name' => fake()->words(3, true) . ' Event',
