@@ -41,7 +41,8 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
             ->greeting('Hello ' . $this->ticket->holder_name . '!')
             ->line('Great news! Your payment has been verified and your ticket is now active.')
             ->line('**Ticket Details:**')
-            ->line('Ticket Type: ' . $this->ticket->ticket_type)
+            ->line('Ticket Type: ' . ($this->ticket->ticketType ? $this->ticket->ticketType->name : 'Unknown'))
+            ->line('Event: ' . ($this->ticket->event ? $this->ticket->event->name : 'Unknown'))
                             ->line('Payment Reference: ' . $this->ticket->payment_ref)
             ->line('QR Code: ' . $this->ticket->qr_code_text)
             ->line('Your ticket is now ready to use at the event. Please keep your QR code safe and present it at the gate.')
@@ -58,8 +59,9 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
     {
         return [
             'ticket_id' => $this->ticket->id,
-            'ticket_type' => $this->ticket->ticket_type,
-                    'payment_ref' => $this->ticket->payment_ref,
+            'ticket_type' => $this->ticket->ticketType ? $this->ticket->ticketType->name : 'Unknown',
+            'event' => $this->ticket->event ? $this->ticket->event->name : 'Unknown',
+            'payment_ref' => $this->ticket->payment_ref,
         ];
     }
 }

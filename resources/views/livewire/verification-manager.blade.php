@@ -35,7 +35,9 @@ new class extends Component {
             return;
         }
 
-        $this->foundTicket = Ticket::where('payment_ref', 'like', '%' . trim($this->searchPaymentRef) . '%')->first();
+        $this->foundTicket = Ticket::with(['ticketType', 'event'])
+            ->where('payment_ref', 'like', '%' . trim($this->searchPaymentRef) . '%')
+            ->first();
     }
 
     /**
@@ -97,7 +99,7 @@ new class extends Component {
      */
     public function getTicketsProperty()
     {
-        $query = Ticket::query();
+        $query = Ticket::with(['ticketType', 'event']);
 
         // Apply filter
         if ($this->filterStatus === 'verified') {
@@ -106,8 +108,15 @@ new class extends Component {
             $query->where('is_verified', false);
         }
 
-        // Apply sort
-        $query->orderBy($this->sortBy, $this->sortDirection);
+        // Apply sort - handle relationship sorting
+        if ($this->sortBy === 'ticket_type') {
+            // Sort by ticket type name through relationship
+            $query->join('event_ticket_types', 'tickets.event_ticket_type_id', '=', 'event_ticket_types.id')
+                  ->orderBy('event_ticket_types.name', $this->sortDirection)
+                  ->select('tickets.*');
+        } else {
+            $query->orderBy($this->sortBy, $this->sortDirection);
+        }
 
         return $query->paginate(20);
     }
@@ -117,7 +126,8 @@ new class extends Component {
      */
     public function getUnverifiedQueueProperty()
     {
-        return Ticket::where('is_verified', false)
+        return Ticket::with(['ticketType', 'event'])
+            ->where('is_verified', false)
             ->orderBy('created_at', 'asc')
             ->limit(10)
             ->get();
@@ -166,7 +176,18 @@ new class extends Component {
                     </div>
                     <div>
                         <flux:text class="text-sm text-neutral-500">Ticket Type</flux:text>
-                        <flux:text class="font-semibold">{{ $foundTicket->ticket_type }}</flux:text>
+                        <flux:text class="font-semibold">
+                            {{ $foundTicket->ticketType ? $foundTicket->ticketType->name : 'Unknown' }}
+                            @if ($foundTicket->ticketType && $foundTicket->ticketType->is_vip)
+                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                    VIP
+                                </span>
+                            @endif
+                        </flux:text>
+                    </div>
+                    <div>
+                        <flux:text class="text-sm text-neutral-500">Event</flux:text>
+                        <flux:text class="font-semibold">{{ $foundTicket->event ? $foundTicket->event->name : 'Unknown' }}</flux:text>
                     </div>
                     <div>
                         <flux:text class="text-sm text-neutral-500">Payment Reference</flux:text>
@@ -238,7 +259,12 @@ new class extends Component {
                                 <td class="px-4 py-3 text-sm font-mono font-semibold">{{ $ticket->payment_ref }}</td>
                                 <td class="px-4 py-3 text-sm">{{ $ticket->holder_name }}</td>
                                 <td class="px-4 py-3 text-sm">{{ $ticket->email ?: '-' }}</td>
-                                <td class="px-4 py-3 text-sm">{{ $ticket->ticket_type }}</td>
+                                <td class="px-4 py-3 text-sm">
+                                    {{ $ticket->ticketType ? $ticket->ticketType->name : 'Unknown' }}
+                                    @if ($ticket->ticketType && $ticket->ticketType->is_vip)
+                                        <span class="ml-1 text-xs text-purple-600 dark:text-purple-400">(VIP)</span>
+                                    @endif
+                                </td>
                                 <td class="px-4 py-3 text-sm">{{ $ticket->created_at->format('Y-m-d H:i') }}</td>
                                 <td class="px-4 py-3 text-sm">
                                     <flux:button
@@ -280,7 +306,6 @@ new class extends Component {
                                 {{ $sortDirection === 'asc' ? '↑' : '↓' }}
                             @endif
                         </th>
-                        <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Payment Reference</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase cursor-pointer" wire:click="updateSort('holder_name')">
                             Holder Name
                             @if ($sortBy === 'holder_name')
@@ -294,6 +319,7 @@ new class extends Component {
                                 {{ $sortDirection === 'asc' ? '↑' : '↓' }}
                             @endif
                         </th>
+                        <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Event</th>
                         <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase cursor-pointer" wire:click="updateSort('created_at')">
                             Created
                             @if ($sortBy === 'created_at')
@@ -310,7 +336,13 @@ new class extends Component {
                             <td class="px-4 py-3 text-sm font-mono font-semibold">{{ $ticket->payment_ref }}</td>
                             <td class="px-4 py-3 text-sm">{{ $ticket->holder_name }}</td>
                             <td class="px-4 py-3 text-sm">{{ $ticket->email ?: '-' }}</td>
-                            <td class="px-4 py-3 text-sm">{{ $ticket->ticket_type }}</td>
+                            <td class="px-4 py-3 text-sm">
+                                {{ $ticket->ticketType ? $ticket->ticketType->name : 'Unknown' }}
+                                @if ($ticket->ticketType && $ticket->ticketType->is_vip)
+                                    <span class="ml-1 text-xs text-purple-600 dark:text-purple-400">(VIP)</span>
+                                @endif
+                            </td>
+                            <td class="px-4 py-3 text-sm">{{ $ticket->event ? $ticket->event->name : 'N/A' }}</td>
                             <td class="px-4 py-3 text-sm">{{ $ticket->created_at->format('Y-m-d H:i') }}</td>
                             <td class="px-4 py-3 text-sm">
                                 @if ($ticket->is_verified)
@@ -335,7 +367,7 @@ new class extends Component {
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-4 py-8 text-center text-neutral-500">
+                            <td colspan="8" class="px-4 py-8 text-center text-neutral-500">
                                 No tickets found.
                             </td>
                         </tr>

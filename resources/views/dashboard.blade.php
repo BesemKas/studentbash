@@ -29,6 +29,17 @@
                         Go to Gate →
                     </flux:link>
                 </div>
+
+                <!-- Event Management -->
+                <div class="p-6 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <flux:heading size="lg" class="mb-2">Event Management</flux:heading>
+                    <flux:text class="mb-4 text-neutral-600 dark:text-neutral-400">
+                        Create and manage events and ticket types
+                    </flux:text>
+                    <flux:link href="{{ route('admin.events') }}" variant="primary" wire:navigate>
+                        Manage Events →
+                    </flux:link>
+                </div>
             </div>
 
             <!-- Sales Data & Stats -->
@@ -63,23 +74,37 @@
                     <flux:heading size="lg" class="mb-4">Ticket Breakdown</flux:heading>
                     <div class="space-y-3">
                         @php
-                            $ticketTypes = \App\Models\Ticket::selectRaw('ticket_type, COUNT(*) as count')
-                                ->groupBy('ticket_type')
-                                ->get();
+                            $ticketTypes = \App\Models\Ticket::with('ticketType')
+                                ->whereNotNull('event_ticket_type_id')
+                                ->get()
+                                ->groupBy('event_ticket_type_id')
+                                ->map(function ($tickets) {
+                                    $ticketType = $tickets->first()->ticketType;
+                                    return [
+                                        'name' => $ticketType ? $ticketType->name : 'Unknown',
+                                        'count' => $tickets->count()
+                                    ];
+                                })
+                                ->sortByDesc('count');
                         @endphp
-                        @foreach($ticketTypes as $type)
-                            <div class="flex justify-between items-center">
-                                <flux:text class="font-semibold">{{ $type->ticket_type }}</flux:text>
-                                <flux:text class="text-neutral-600 dark:text-neutral-400">{{ $type->count }} tickets</flux:text>
-                            </div>
-                        @endforeach
+                        @if($ticketTypes->count() > 0)
+                            @foreach($ticketTypes as $type)
+                                <div class="flex justify-between items-center">
+                                    <flux:text class="font-semibold">{{ $type['name'] }}</flux:text>
+                                    <flux:text class="text-neutral-600 dark:text-neutral-400">{{ $type['count'] }} tickets</flux:text>
+                                </div>
+                            @endforeach
+                        @else
+                            <flux:text class="text-neutral-500">No tickets yet</flux:text>
+                        @endif
                     </div>
                 </div>
             </div>
 
             <!-- Recent Unverified Tickets -->
             @php
-                $unverifiedTickets = \App\Models\Ticket::where('is_verified', false)
+                $unverifiedTickets = \App\Models\Ticket::with(['ticketType', 'event'])
+                    ->where('is_verified', false)
                     ->orderBy('created_at', 'desc')
                     ->limit(5)
                     ->get();
@@ -91,9 +116,10 @@
                         <table class="min-w-full divide-y divide-neutral-200 dark:divide-neutral-700">
                             <thead class="bg-neutral-50 dark:bg-neutral-900">
                                 <tr>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Payment Code</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Payment Reference</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Holder</th>
-                                    <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Type</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Event</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Ticket Type</th>
                                     <th class="px-4 py-3 text-left text-xs font-medium text-neutral-500 uppercase">Created</th>
                                 </tr>
                             </thead>
@@ -102,7 +128,13 @@
                                     <tr>
                                         <td class="px-4 py-3 text-sm font-mono">{{ $ticket->payment_ref }}</td>
                                         <td class="px-4 py-3 text-sm">{{ $ticket->holder_name }}</td>
-                                        <td class="px-4 py-3 text-sm">{{ $ticket->ticket_type }}</td>
+                                        <td class="px-4 py-3 text-sm">{{ $ticket->event ? $ticket->event->name : 'N/A' }}</td>
+                                        <td class="px-4 py-3 text-sm">
+                                            {{ $ticket->ticketType ? $ticket->ticketType->name : 'Unknown' }}
+                                            @if($ticket->ticketType && $ticket->ticketType->is_vip)
+                                                <span class="ml-1 text-xs text-purple-600 dark:text-purple-400">(VIP)</span>
+                                            @endif
+                                        </td>
                                         <td class="px-4 py-3 text-sm">{{ $ticket->created_at->format('Y-m-d H:i') }}</td>
                                     </tr>
                                 @endforeach

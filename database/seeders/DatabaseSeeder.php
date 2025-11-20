@@ -17,7 +17,7 @@ class DatabaseSeeder extends Seeder
         $this->call(RoleSeeder::class);
 
         // Seed events and ticket types
-        $this->call(EventSeeder::class);
+        //$this->call(EventSeeder::class);
 
         // Create admin user
         $admin = User::factory()->create([
