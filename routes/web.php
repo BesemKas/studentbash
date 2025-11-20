@@ -30,6 +30,18 @@ Volt::route('admin/verify', 'verification-manager')
     ->middleware('role:admin')
     ->name('admin.verify');
 
+// Admin events route (admin role only)
+Volt::route('admin/events', 'admin-events')
+    ->middleware(['auth'])
+    ->middleware('role:admin')
+    ->name('admin.events');
+
+// Admin event ticket types route (admin role only)
+Volt::route('admin/events/{event}/ticket-types', 'admin-event-ticket-types')
+    ->middleware(['auth'])
+    ->middleware('role:admin')
+    ->name('admin.events.ticket-types');
+
 // Dashboard route - redirect based on role
 Route::view('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])

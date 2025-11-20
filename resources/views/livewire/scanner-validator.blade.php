@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Ticket;
+use App\Models\Event;
+use App\Models\EventDate;
 use Illuminate\Support\Facades\Session;
 use Livewire\Volt\Component;
 
@@ -9,19 +11,22 @@ new class extends Component {
     public ?Ticket $foundTicket = null;
     public string $statusMessage = '';
     public string $statusType = ''; // 'success', 'error', 'warning'
+    public ?string $armbandInfo = null;
 
     /**
      * Search for ticket by QR code text.
      */
     public function searchTicket(): void
     {
-        $this->reset(['foundTicket', 'statusMessage', 'statusType']);
+        $this->reset(['foundTicket', 'statusMessage', 'statusType', 'armbandInfo']);
 
         if (empty($this->searchId)) {
             return;
         }
 
-        $this->foundTicket = Ticket::where('qr_code_text', trim($this->searchId))->first();
+        $this->foundTicket = Ticket::with(['event', 'ticketType'])
+            ->where('qr_code_text', trim($this->searchId))
+            ->first();
 
         if (!$this->foundTicket) {
             $this->statusMessage = 'TICKET NOT FOUND';
@@ -47,52 +52,58 @@ new class extends Component {
             return;
         }
 
-        // Get current day (4, 5, or 6 for December)
-        $currentDay = (int) date('j');
-        $currentMonth = (int) date('n');
-
-        // Only allow check-ins in December
-        if ($currentMonth !== 12) {
-            $this->statusMessage = 'INVALID DATE - System only active in December';
+        // Check if ticket is already used (one-time use)
+        if ($this->foundTicket->isUsed()) {
+            $this->statusMessage = 'DENIED - TICKET ALREADY USED';
             $this->statusType = 'error';
             return;
         }
 
-        // Map day to column
-        $statusKey = match ($currentDay) {
-            4 => 'd4_used',
-            5 => 'd5_used',
-            6 => 'd6_used',
-            default => null,
-        };
-
-        if ($statusKey === null) {
-            $this->statusMessage = 'INVALID DATE - System only active Dec 4-6';
+        // Get active event
+        $activeEvent = Event::where('is_active', true)->first();
+        if (!$activeEvent) {
+            $this->statusMessage = 'NO ACTIVE EVENT - Please contact administrator';
             $this->statusType = 'error';
             return;
         }
 
-        // Check if already used for this day
-        if ($this->foundTicket->$statusKey) {
-            $this->statusMessage = 'DENIED - TICKET ALREADY USED FOR THIS DAY';
+        // Validate ticket belongs to active event
+        if ($this->foundTicket->event_id !== $activeEvent->id) {
+            $this->statusMessage = 'DENIED - TICKET NOT VALID FOR CURRENT EVENT';
             $this->statusType = 'error';
             return;
         }
 
-        // Validate day pass tickets
-        $ticketType = strtoupper($this->foundTicket->ticket_type);
-        if (in_array($ticketType, ['D4', 'D5', 'D6'])) {
-            $requiredDay = (int) substr($ticketType, 1); // Extract day from D4, D5, D6
-            if ($currentDay !== $requiredDay) {
-                $this->statusMessage = "DENIED - {$ticketType} TICKET ONLY VALID ON DEC {$requiredDay}";
-                $this->statusType = 'error';
-                return;
-            }
+        // Get current date and find matching EventDate
+        $currentDate = now()->format('Y-m-d');
+        $eventDate = $activeEvent->eventDates()
+            ->where('date', $currentDate)
+            ->first();
+
+        if (!$eventDate) {
+            $this->statusMessage = 'INVALID DATE - No event scheduled for today';
+            $this->statusType = 'error';
+            return;
         }
 
-        // VIP and FULL tickets are valid on any day (4, 5, or 6)
-        // Update ticket status
-        $this->foundTicket->update([$statusKey => true]);
+        // Check if ticket type is valid for current date
+        if (!$this->foundTicket->ticketType) {
+            $this->statusMessage = 'INVALID TICKET - Ticket type not found';
+            $this->statusType = 'error';
+            return;
+        }
+
+        if (!$this->foundTicket->ticketType->isValidForDate($eventDate->id)) {
+            $this->statusMessage = 'DENIED - TICKET NOT VALID FOR TODAY';
+            $this->statusType = 'error';
+            return;
+        }
+
+        // Mark ticket as used
+        $this->foundTicket->markAsUsed();
+
+        // Get armband information
+        $this->armbandInfo = $this->foundTicket->getArmbandInfo();
 
         $this->statusMessage = 'ENTRY GRANTED';
         $this->statusType = 'success';
@@ -105,7 +116,30 @@ new class extends Component {
      */
     public function resetSearch(): void
     {
-        $this->reset(['searchId', 'foundTicket', 'statusMessage', 'statusType']);
+        $this->reset(['searchId', 'foundTicket', 'statusMessage', 'statusType', 'armbandInfo']);
+    }
+
+    /**
+     * Get active event for display
+     */
+    public function getActiveEventProperty()
+    {
+        return Event::where('is_active', true)->first();
+    }
+
+    /**
+     * Get current event date
+     */
+    public function getCurrentEventDateProperty()
+    {
+        $activeEvent = $this->activeEvent;
+        if (!$activeEvent) {
+            return null;
+        }
+
+        return $activeEvent->eventDates()
+            ->where('date', now()->format('Y-m-d'))
+            ->first();
     }
 }; ?>
 
@@ -118,7 +152,17 @@ new class extends Component {
     <div class="space-y-6">
         <!-- Current Date Display -->
         <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
-            <flux:text class="font-semibold">Current Date: {{ date('F j, Y') }} (Day {{ date('j') }})</flux:text>
+            <flux:text class="font-semibold">Current Date: {{ date('F j, Y') }}</flux:text>
+            @if ($this->activeEvent)
+                <flux:text class="text-sm text-neutral-500 mt-1">
+                    Active Event: {{ $this->activeEvent->name }}
+                    @if ($this->currentEventDate)
+                        - Day {{ $this->currentEventDate->day_number }}
+                    @endif
+                </flux:text>
+            @else
+                <flux:text class="text-sm text-red-500 mt-1">No active event</flux:text>
+            @endif
         </div>
 
         <!-- Search Input -->
@@ -166,7 +210,19 @@ new class extends Component {
 
                     <div>
                         <flux:text class="text-sm text-neutral-500">Ticket Type</flux:text>
-                        <flux:text class="font-semibold">{{ $foundTicket->ticket_type }}</flux:text>
+                        <flux:text class="font-semibold">
+                            {{ $foundTicket->ticketType ? $foundTicket->ticketType->name : 'Unknown' }}
+                            @if ($foundTicket->ticketType && $foundTicket->ticketType->is_vip)
+                                <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                    VIP
+                                </span>
+                            @endif
+                        </flux:text>
+                    </div>
+
+                    <div>
+                        <flux:text class="text-sm text-neutral-500">Event</flux:text>
+                        <flux:text class="font-semibold">{{ $foundTicket->event ? $foundTicket->event->name : 'Unknown' }}</flux:text>
                     </div>
 
                     <div>
@@ -196,18 +252,38 @@ new class extends Component {
 
                     <div>
                         <flux:text class="text-sm text-neutral-500">Usage Status</flux:text>
-                        <div class="space-y-1">
-                            <flux:text class="text-xs">
-                                Dec 4: {{ $foundTicket->d4_used ? '✓ Used' : '○ Available' }}
-                            </flux:text>
-                            <flux:text class="text-xs">
-                                Dec 5: {{ $foundTicket->d5_used ? '✓ Used' : '○ Available' }}
-                            </flux:text>
-                            <flux:text class="text-xs">
-                                Dec 6: {{ $foundTicket->d6_used ? '✓ Used' : '○ Available' }}
-                            </flux:text>
+                        <div>
+                            @if ($foundTicket->isUsed())
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                    ✗ Used
+                                </span>
+                                <flux:text class="text-xs text-neutral-500 mt-1 block">
+                                    Used on: {{ $foundTicket->used_at->format('M j, Y H:i') }}
+                                </flux:text>
+                            @else
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                    ○ Available
+                                </span>
+                            @endif
                         </div>
                     </div>
+
+                    @if ($foundTicket->ticketType)
+                        <div>
+                            <flux:text class="text-sm text-neutral-500">Valid Dates</flux:text>
+                            <div class="text-xs">
+                                @if ($foundTicket->ticketType->isFullPass())
+                                    <flux:text>All event dates</flux:text>
+                                @else
+                                    @foreach ($foundTicket->ticketType->getValidDates() as $date)
+                                        <flux:text class="block">
+                                            Day {{ $date->day_number }}: {{ $date->date->format('M j, Y') }}
+                                        </flux:text>
+                                    @endforeach
+                                @endif
+                            </div>
+                        </div>
+                    @endif
                 </div>
 
                 @if (!$foundTicket->is_verified)
@@ -226,7 +302,7 @@ new class extends Component {
                         wire:click="checkIn"
                         variant="primary"
                         class="w-full"
-                        :disabled="!$foundTicket->is_verified"
+                        :disabled="!$foundTicket->is_verified || $foundTicket->isUsed()"
                     >
                         Check In
                     </flux:button>
@@ -256,6 +332,13 @@ new class extends Component {
                 ">
                     {{ $statusMessage }}
                 </flux:heading>
+                @if ($statusType === 'success' && $armbandInfo)
+                    <div class="mt-4 p-4 bg-white dark:bg-neutral-800 rounded-lg">
+                        <flux:text class="text-lg font-semibold text-neutral-700 dark:text-neutral-300">
+                            Give armband: <span class="text-primary">{{ $armbandInfo }}</span>
+                        </flux:text>
+                    </div>
+                @endif
             </div>
         @endif
     </div>

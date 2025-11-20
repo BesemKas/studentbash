@@ -16,6 +16,9 @@ class DatabaseSeeder extends Seeder
         // Seed roles
         $this->call(RoleSeeder::class);
 
+        // Seed events and ticket types
+        $this->call(EventSeeder::class);
+
         // Create admin user
         $admin = User::factory()->create([
             'name' => 'Admin User',
@@ -28,7 +31,6 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
             'password' => bcrypt('password'),
-
         ]);
         $user->assignRole('user');
 

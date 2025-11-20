@@ -18,6 +18,7 @@ new class extends Component {
     public function getTicketsProperty()
     {
         return Auth::user()->tickets()
+            ->with(['event', 'ticketType'])
             ->orderBy('created_at', 'desc')
             ->paginate(10);
     }
@@ -142,9 +143,23 @@ new class extends Component {
                     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-4 border-b border-neutral-200 dark:border-neutral-700">
                         <div>
                             <flux:heading size="lg">{{ $ticket->holder_name }}</flux:heading>
-                            <flux:text class="text-sm text-neutral-500 mt-1">{{ $ticket->ticket_type }} Ticket</flux:text>
+                            <flux:text class="text-sm text-neutral-500 mt-1">
+                                @if ($ticket->event)
+                                    {{ $ticket->event->name }} - 
+                                @endif
+                                @if ($ticket->ticketType)
+                                    {{ $ticket->ticketType->name }}
+                                    @if ($ticket->ticketType->is_vip)
+                                        <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
+                                            VIP
+                                        </span>
+                                    @endif
+                                @else
+                                    Unknown Ticket Type
+                                @endif
+                            </flux:text>
                         </div>
-                        <div>
+                        <div class="flex flex-wrap gap-2">
                             @if ($ticket->is_verified)
                                 <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
                                     ✓ Verified & Active
@@ -152,6 +167,11 @@ new class extends Component {
                             @else
                                 <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
                                     ⏳ Pending Verification
+                                </span>
+                            @endif
+                            @if ($ticket->isUsed())
+                                <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                    ✗ Used
                                 </span>
                             @endif
                         </div>
@@ -181,18 +201,42 @@ new class extends Component {
 
                         <div class="space-y-1">
                             <flux:text class="text-xs font-medium text-neutral-500 uppercase">Usage Status</flux:text>
-                            <div class="flex flex-wrap gap-2 mt-1">
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ $ticket->d4_used ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300' }}">
-                                    Dec 4: {{ $ticket->d4_used ? '✓ Used' : '○ Available' }}
-                                </span>
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ $ticket->d5_used ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300' }}">
-                                    Dec 5: {{ $ticket->d5_used ? '✓ Used' : '○ Available' }}
-                                </span>
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium {{ $ticket->d6_used ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300' }}">
-                                    Dec 6: {{ $ticket->d6_used ? '✓ Used' : '○ Available' }}
-                                </span>
+                            <div class="mt-1">
+                                @if ($ticket->isUsed())
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                        ✗ Used on {{ $ticket->used_at->format('M j, Y H:i') }}
+                                    </span>
+                                    @if ($ticket->ticketType)
+                                        <div class="mt-2">
+                                            <flux:text class="text-xs text-neutral-500">Armband: </flux:text>
+                                            <flux:text class="text-xs font-semibold">{{ $ticket->getArmbandInfo() }}</flux:text>
+                                        </div>
+                                    @endif
+                                @else
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                        ○ Available
+                                    </span>
+                                @endif
                             </div>
                         </div>
+
+                        @if ($ticket->ticketType)
+                            <div class="space-y-1">
+                                <flux:text class="text-xs font-medium text-neutral-500 uppercase">Valid Dates</flux:text>
+                                <div class="text-xs mt-1">
+                                    @if ($ticket->ticketType->isFullPass())
+                                        <flux:text>All event dates</flux:text>
+                                    @else
+                                        @foreach ($ticket->ticketType->getValidDates() as $date)
+                                            <div class="mb-1">
+                                                Day {{ $date->day_number }}: {{ $date->date->format('M j, Y') }}
+                                                <span class="text-neutral-500">({{ ucfirst($date->armband_color) }} armband)</span>
+                                            </div>
+                                        @endforeach
+                                    @endif
+                                </div>
+                            </div>
+                        @endif
                     </div>
 
                     <!-- QR Code Display -->

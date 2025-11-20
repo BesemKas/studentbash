@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Ticket;
+use App\Models\Event;
+use App\Models\EventTicketType;
 use App\Utilities\TicketIdGenerator;
 use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
@@ -10,10 +12,11 @@ use Illuminate\Support\Facades\Session;
 use Livewire\Volt\Component;
 
 new class extends Component {
+    public ?int $eventId = null;
     public string $holderName = '';
     public string $email = '';
     public string $dob = '';
-    public string $ticketType = '';
+    public ?int $eventTicketTypeId = null;
     public string $paymentRef = '';
     public string $qrCodeText = '';
     public string $qrCodeSvg = '';
@@ -22,13 +25,68 @@ new class extends Component {
     public string $lastSavedPaymentRef = '';
 
     /**
+     * Mount the component
+     */
+    public function mount(): void
+    {
+        // Set default to active event if available
+        $activeEvent = Event::where('is_active', true)->first();
+        if ($activeEvent) {
+            $this->eventId = $activeEvent->id;
+        }
+    }
+
+    /**
      * Update QR code text when relevant fields change.
      */
     public function updated($propertyName): void
     {
-        if (in_array($propertyName, ['holderName', 'dob', 'ticketType'])) {
+        if (in_array($propertyName, ['holderName', 'dob', 'eventTicketTypeId'])) {
             $this->generateQrCode();
         }
+    }
+
+    /**
+     * Get active event
+     */
+    public function getActiveEventProperty()
+    {
+        return Event::where('is_active', true)->first();
+    }
+
+    /**
+     * Get selected event
+     */
+    public function getSelectedEventProperty()
+    {
+        if (!$this->eventId) {
+            return null;
+        }
+        return Event::find($this->eventId);
+    }
+
+    /**
+     * Get ticket types for selected event
+     */
+    public function getTicketTypesProperty()
+    {
+        if (!$this->eventId) {
+            return collect();
+        }
+        return EventTicketType::where('event_id', $this->eventId)
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Get selected ticket type
+     */
+    public function getSelectedTicketTypeProperty()
+    {
+        if (!$this->eventTicketTypeId) {
+            return null;
+        }
+        return EventTicketType::find($this->eventTicketTypeId);
     }
 
     /**
@@ -36,15 +94,18 @@ new class extends Component {
      */
     public function generateQrCode(): void
     {
-        if (empty($this->holderName) || empty($this->dob) || empty($this->ticketType)) {
+        if (empty($this->holderName) || empty($this->dob) || !$this->selectedTicketType) {
             $this->qrCodeText = '';
             $this->qrCodeSvg = '';
             return;
         }
 
+        // Use ticket type name for QR code generation
+        $ticketTypeName = strtoupper($this->selectedTicketType->name);
+
         // Generate secure ID
         $this->qrCodeText = TicketIdGenerator::generateSecureId(
-            $this->ticketType,
+            $ticketTypeName,
             $this->dob,
             $this->holderName
         );
@@ -68,10 +129,11 @@ new class extends Component {
     public function saveTicket(): void
     {
         $validated = $this->validate([
+            'eventId' => ['required', 'exists:events,id'],
             'holderName' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
             'dob' => ['required', 'date', 'date_format:Y-m-d'],
-            'ticketType' => ['required', 'string', 'in:VIP,FULL,D4,D5,D6'],
+            'eventTicketTypeId' => ['required', 'exists:event_ticket_types,id'],
         ]);
 
         // Ensure QR code is generated
@@ -100,20 +162,21 @@ new class extends Component {
             }
         }
 
-        // Determine if VIP
-        $isVip = strtoupper($this->ticketType) === 'VIP';
+        // Get ticket type to inherit VIP status
+        $ticketType = EventTicketType::find($this->eventTicketTypeId);
 
         // Create ticket with is_verified = false (default)
         Ticket::create([
             'user_id' => auth()->id(),
+            'event_id' => $this->eventId,
+            'event_ticket_type_id' => $this->eventTicketTypeId,
             'qr_code_text' => $this->qrCodeText,
             'holder_name' => $this->holderName,
             'email' => $this->email,
             'dob' => $this->dob,
-            'ticket_type' => strtoupper($this->ticketType),
             'payment_ref' => $this->paymentRef,
             'is_verified' => false,
-            'is_vip' => $isVip,
+            'is_vip' => $ticketType->is_vip,
         ]);
 
         // Store QR code and payment reference before resetting
@@ -121,8 +184,8 @@ new class extends Component {
         $this->lastSavedQrCodeSvg = $this->qrCodeSvg;
         $this->lastSavedPaymentRef = $this->paymentRef;
 
-        // Reset form to allow creating another ticket
-        $this->reset(['holderName', 'email', 'dob', 'ticketType', 'qrCodeText', 'qrCodeSvg', 'paymentRef']);
+        // Reset form to allow creating another ticket (keep event selection)
+        $this->reset(['holderName', 'email', 'dob', 'eventTicketTypeId', 'qrCodeText', 'qrCodeSvg', 'paymentRef']);
 
         Session::flash('ticket-saved', 'Ticket created successfully! Payment reference: ' . $this->lastSavedPaymentRef . ' - Please complete payment using the options below.');
     }
@@ -200,6 +263,70 @@ new class extends Component {
         <!-- Form Section -->
         <div class="space-y-6">
             <form wire:submit="saveTicket" class="space-y-6">
+                <flux:select
+                    wire:model.live="eventId"
+                    label="Event"
+                    required
+                    placeholder="Select event"
+                >
+                    <option value="">Select event</option>
+                    @foreach (Event::where('is_active', true)->orderBy('start_date', 'desc')->get() as $event)
+                        <option value="{{ $event->id }}">{{ $event->name }} ({{ $event->getDateRange() }})</option>
+                    @endforeach
+                </flux:select>
+
+                @if ($this->eventId && $this->ticketTypes->count() > 0)
+                    <flux:select
+                        wire:model="eventTicketTypeId"
+                        label="Ticket Type"
+                        required
+                        placeholder="Select ticket type"
+                    >
+                        <option value="">Select ticket type</option>
+                        @foreach ($this->ticketTypes as $ticketType)
+                            <option value="{{ $ticketType->id }}">
+                                {{ $ticketType->name }}
+                                @if ($ticketType->is_vip)
+                                    (VIP)
+                                @endif
+                                @if ($ticketType->isFullPass())
+                                    - Full Pass
+                                @else
+                                    - Day Pass
+                                @endif
+                                @if ($ticketType->price)
+                                    - R{{ number_format($ticketType->price, 2) }}
+                                @endif
+                            </option>
+                        @endforeach
+                    </flux:select>
+
+                    @if ($this->selectedTicketType)
+                        <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                            <flux:text class="text-sm font-semibold mb-2">Ticket Type Details:</flux:text>
+                            @if ($this->selectedTicketType->description)
+                                <flux:text class="text-sm text-neutral-600 dark:text-neutral-400">{{ $this->selectedTicketType->description }}</flux:text>
+                            @endif
+                            <div class="mt-2 text-sm">
+                                <flux:text class="text-neutral-600 dark:text-neutral-400">
+                                    Valid for: 
+                                    @if ($this->selectedTicketType->isFullPass())
+                                        All event dates
+                                    @else
+                                        {{ $this->selectedTicketType->getValidDates()->count() }} day(s)
+                                    @endif
+                                </flux:text>
+                            </div>
+                        </div>
+                    @endif
+                @elseif ($this->eventId && $this->ticketTypes->count() === 0)
+                    <div class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                        <flux:text class="text-yellow-800 dark:text-yellow-300">
+                            No ticket types available for this event. Please contact administrator.
+                        </flux:text>
+                    </div>
+                @endif
+
                 <flux:input
                     wire:model="holderName"
                     label="Holder Name"
@@ -224,21 +351,7 @@ new class extends Component {
                     required
                 />
 
-                <flux:select
-                    wire:model="ticketType"
-                    label="Ticket Type"
-                    required
-                    placeholder="Select ticket type"
-                >
-                    <option value="">Select ticket type</option>
-                    <option value="VIP">VIP</option>
-                    <option value="FULL">FULL</option>
-                    <option value="D4">D4 (Dec 4 Only)</option>
-                    <option value="D5">D5 (Dec 5 Only)</option>
-                    <option value="D6">D6 (Dec 6 Only)</option>
-                </flux:select>
-
-                <flux:button variant="primary" type="submit" class="w-full">
+                <flux:button variant="primary" type="submit" class="w-full" :disabled="!$this->eventId || !$this->eventTicketTypeId">
                     Generate & Save Ticket
                 </flux:button>
             </form>

@@ -13,18 +13,29 @@ return new class extends Migration
     {
         Schema::create('tickets', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
+            $table->unsignedBigInteger('event_id')->nullable();
+            $table->unsignedBigInteger('event_ticket_type_id')->nullable();
             $table->string('qr_code_text', 30)->unique()->index();
             $table->string('holder_name', 255);
+            $table->string('email', 255);
             $table->date('dob');
-            $table->string('ticket_type', 10);
-            $table->string('payment_code', 15)->unique()->index();
-            $table->string('payment_ref', 255)->nullable();
+            $table->string('payment_ref', 255)->nullable()->unique()->index();
             $table->boolean('is_verified')->default(false);
             $table->boolean('is_vip')->default(false);
-            $table->boolean('d4_used')->default(false);
-            $table->boolean('d5_used')->default(false);
-            $table->boolean('d6_used')->default(false);
+            $table->timestamp('used_at')->nullable();
             $table->timestamps();
+
+            // Indexes for common queries
+            $table->index('event_id');
+            $table->index('event_ticket_type_id');
+            $table->index('is_verified');
+            $table->index('used_at');
+            $table->index('is_vip');
+            $table->index('email');
+            $table->index(['user_id', 'is_verified']);
+            $table->index(['event_id', 'is_verified']);
+            $table->index(['event_id', 'used_at']);
         });
     }
 

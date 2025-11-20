@@ -12,7 +12,10 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('tickets', function (Blueprint $table) {
-            $table->string('email', 255)->nullable()->after('holder_name');
+            // Foreign keys automatically create indexes, but we already have indexes
+            // so we'll just add the foreign key constraints
+            $table->foreign('event_id')->references('id')->on('events')->onDelete('cascade');
+            $table->foreign('event_ticket_type_id')->references('id')->on('event_ticket_types')->onDelete('cascade');
         });
     }
 
@@ -22,7 +25,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('tickets', function (Blueprint $table) {
-            $table->dropColumn('email');
+            $table->dropForeign(['event_id']);
+            $table->dropForeign(['event_ticket_type_id']);
         });
     }
 };
