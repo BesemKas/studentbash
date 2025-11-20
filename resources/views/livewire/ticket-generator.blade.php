@@ -44,6 +44,13 @@ new class extends Component {
         if (in_array($propertyName, ['holderName', 'dob', 'eventTicketTypeId'])) {
             $this->generateQrCode();
         }
+        
+        // Reset ticket type when event changes
+        if ($propertyName === 'eventId') {
+            $this->eventTicketTypeId = null;
+            $this->qrCodeText = '';
+            $this->qrCodeSvg = '';
+        }
     }
 
     /**
@@ -275,9 +282,17 @@ new class extends Component {
                     @endforeach
                 </flux:select>
 
+                @if (Event::where('is_active', true)->count() === 0)
+                    <div class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                        <flux:text class="text-yellow-800 dark:text-yellow-300">
+                            No active events available. Please contact administrator to create an event.
+                        </flux:text>
+                    </div>
+                @endif
+
                 @if ($this->eventId && $this->ticketTypes->count() > 0)
                     <flux:select
-                        wire:model="eventTicketTypeId"
+                        wire:model.live="eventTicketTypeId"
                         label="Ticket Type"
                         required
                         placeholder="Select ticket type"
