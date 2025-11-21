@@ -25,6 +25,9 @@
                 <flux:navlist.item icon="ticket" href="{{ route('my.tickets') }}" :current="request()->routeIs('my.tickets')" wire:navigate>
                     {{ __('My Tickets') }}
                 </flux:navlist.item>
+                <flux:navlist.item icon="currency-dollar" href="{{ route('how-to-pay') }}" :current="request()->routeIs('how-to-pay')" wire:navigate>
+                    {{ __('How to Pay') }}
+                </flux:navlist.item>
             </flux:navlist.group>
         </flux:navlist>
         <flux:spacer />
@@ -39,6 +42,9 @@
                     </flux:navlist.item>
                     <flux:navlist.item icon="check-circle" href="{{ route('gate') }}" :current="request()->routeIs('gate')" wire:navigate>
                         {{ __('Gate Validation') }}
+                    </flux:navlist.item>
+                    <flux:navlist.item icon="calendar" href="{{ route('admin.events') }}" :current="request()->routeIs('admin.events')" wire:navigate>
+                        {{ __('Event Management') }}
                     </flux:navlist.item>
                 </flux:navlist.group>
             </flux:navlist>

@@ -8,6 +8,7 @@ use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Livewire\Volt\Component;
 
@@ -20,19 +21,57 @@ new class extends Component {
     public string $paymentRef = '';
     public string $qrCodeText = '';
     public string $qrCodeSvg = '';
-    public string $lastSavedQrCodeText = '';
-    public string $lastSavedQrCodeSvg = '';
-    public string $lastSavedPaymentRef = '';
+
+    /**
+     * Sanitize input to only allow letters, digits, and hyphens
+     */
+    private function sanitizeInput(?string $value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+        $sanitized = preg_replace('/[^a-zA-Z0-9\-]/', '', $value);
+        return $sanitized === '' ? null : $sanitized;
+    }
 
     /**
      * Mount the component
      */
     public function mount(): void
     {
-        // Set default to active event if available
-        $activeEvent = Event::where('is_active', true)->first();
-        if ($activeEvent) {
-            $this->eventId = $activeEvent->id;
+        try {
+            Log::info('[TicketGenerator] mount started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Set default to active event if available
+            $activeEvent = Event::where('is_active', true)->first();
+            if ($activeEvent) {
+                $this->eventId = $activeEvent->id;
+                Log::debug('[TicketGenerator] mount - active event found', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $activeEvent->id,
+                ]);
+            } else {
+                Log::debug('[TicketGenerator] mount - no active event found', [
+                    'user_id' => auth()->id(),
+                ]);
+            }
+
+            Log::info('[TicketGenerator] mount completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] mount failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
     }
 
@@ -41,15 +80,71 @@ new class extends Component {
      */
     public function updated($propertyName): void
     {
-        if (in_array($propertyName, ['holderName', 'dob', 'eventTicketTypeId'])) {
-            $this->generateQrCode();
-        }
-        
-        // Reset ticket type when event changes
-        if ($propertyName === 'eventId') {
-            $this->eventTicketTypeId = null;
-            $this->qrCodeText = '';
-            $this->qrCodeSvg = '';
+        try {
+            Log::debug('[TicketGenerator] updated started', [
+                'user_id' => auth()->id(),
+                'property_name' => $propertyName,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Sanitize holderName when it's updated
+            if ($propertyName === 'holderName') {
+                $originalValue = $this->holderName;
+                $this->holderName = $this->sanitizeInput($this->holderName) ?? '';
+                if ($originalValue !== $this->holderName) {
+                    Log::debug('[TicketGenerator] updated - holderName sanitized', [
+                        'user_id' => auth()->id(),
+                        'original' => $originalValue,
+                        'sanitized' => $this->holderName,
+                    ]);
+                }
+            }
+
+            if (in_array($propertyName, ['holderName', 'dob', 'eventTicketTypeId'])) {
+                // Only generate QR code if we have all required data
+                // Use a try-catch to prevent exceptions from breaking Livewire
+                try {
+                    $this->generateQrCode();
+                } catch (\Exception $e) {
+                    // Log but don't throw - allow the property update to complete
+                    Log::warning('[TicketGenerator] updated - generateQrCode failed, continuing', [
+                        'user_id' => auth()->id(),
+                        'property_name' => $propertyName,
+                        'error' => $e->getMessage(),
+                    ]);
+                    // Clear QR code on error
+                    $this->qrCodeText = '';
+                    $this->qrCodeSvg = '';
+                }
+            }
+            
+            // Reset ticket type when event changes
+            if ($propertyName === 'eventId') {
+                $this->eventTicketTypeId = null;
+                $this->qrCodeText = '';
+                $this->qrCodeSvg = '';
+                Log::debug('[TicketGenerator] updated - event changed, reset ticket type', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->eventId,
+                ]);
+            }
+
+            Log::debug('[TicketGenerator] updated completed successfully', [
+                'user_id' => auth()->id(),
+                'property_name' => $propertyName,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] updated failed', [
+                'user_id' => auth()->id(),
+                'property_name' => $propertyName,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            // Don't throw exception in updated() method as it can break Livewire requests
+            // Instead, add a user-friendly error message
+            $this->addError('general', 'An error occurred while updating. Please try again.');
         }
     }
 
@@ -58,7 +153,30 @@ new class extends Component {
      */
     public function getActiveEventProperty()
     {
-        return Event::where('is_active', true)->first();
+        try {
+            Log::debug('[TicketGenerator] getActiveEventProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $activeEvent = Event::where('is_active', true)->first();
+
+            Log::debug('[TicketGenerator] getActiveEventProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'active_event_id' => $activeEvent?->id,
+            ]);
+
+            return $activeEvent;
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] getActiveEventProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -66,10 +184,40 @@ new class extends Component {
      */
     public function getSelectedEventProperty()
     {
-        if (!$this->eventId) {
-            return null;
+        try {
+            Log::debug('[TicketGenerator] getSelectedEventProperty started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            if (!$this->eventId) {
+                Log::debug('[TicketGenerator] getSelectedEventProperty - no event ID', [
+                    'user_id' => auth()->id(),
+                ]);
+                return null;
+            }
+
+            $event = Event::find($this->eventId);
+
+            Log::debug('[TicketGenerator] getSelectedEventProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+                'event_found' => $event !== null,
+            ]);
+
+            return $event;
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] getSelectedEventProperty failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
-        return Event::find($this->eventId);
     }
 
     /**
@@ -77,12 +225,42 @@ new class extends Component {
      */
     public function getTicketTypesProperty()
     {
-        if (!$this->eventId) {
-            return collect();
+        try {
+            Log::debug('[TicketGenerator] getTicketTypesProperty started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            if (!$this->eventId) {
+                Log::debug('[TicketGenerator] getTicketTypesProperty - no event ID, returning empty collection', [
+                    'user_id' => auth()->id(),
+                ]);
+                return collect();
+            }
+
+            $ticketTypes = EventTicketType::where('event_id', $this->eventId)
+                ->orderBy('name')
+                ->get();
+
+            Log::debug('[TicketGenerator] getTicketTypesProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+                'ticket_types_count' => $ticketTypes->count(),
+            ]);
+
+            return $ticketTypes;
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] getTicketTypesProperty failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
-        return EventTicketType::where('event_id', $this->eventId)
-            ->orderBy('name')
-            ->get();
     }
 
     /**
@@ -90,10 +268,40 @@ new class extends Component {
      */
     public function getSelectedTicketTypeProperty()
     {
-        if (!$this->eventTicketTypeId) {
-            return null;
+        try {
+            Log::debug('[TicketGenerator] getSelectedTicketTypeProperty started', [
+                'user_id' => auth()->id(),
+                'event_ticket_type_id' => $this->eventTicketTypeId,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            if (!$this->eventTicketTypeId) {
+                Log::debug('[TicketGenerator] getSelectedTicketTypeProperty - no ticket type ID', [
+                    'user_id' => auth()->id(),
+                ]);
+                return null;
+            }
+
+            $ticketType = EventTicketType::find($this->eventTicketTypeId);
+
+            Log::debug('[TicketGenerator] getSelectedTicketTypeProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'event_ticket_type_id' => $this->eventTicketTypeId,
+                'ticket_type_found' => $ticketType !== null,
+            ]);
+
+            return $ticketType;
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] getSelectedTicketTypeProperty failed', [
+                'user_id' => auth()->id(),
+                'event_ticket_type_id' => $this->eventTicketTypeId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
-        return EventTicketType::find($this->eventTicketTypeId);
     }
 
     /**
@@ -101,109 +309,276 @@ new class extends Component {
      */
     public function generateQrCode(): void
     {
-        if (empty($this->holderName) || empty($this->dob) || !$this->selectedTicketType) {
-            $this->qrCodeText = '';
-            $this->qrCodeSvg = '';
-            return;
-        }
-
-        // Use ticket type name for QR code generation
-        $ticketTypeName = strtoupper($this->selectedTicketType->name);
-
-        // Generate secure ID
-        $this->qrCodeText = TicketIdGenerator::generateSecureId(
-            $ticketTypeName,
-            $this->dob,
-            $this->holderName
-        );
-
-        // Generate QR code SVG
         try {
-            $renderer = new ImageRenderer(
-                new RendererStyle(400),
-                new SvgImageBackEnd()
+            Log::debug('[TicketGenerator] generateQrCode started', [
+                'user_id' => auth()->id(),
+                'holder_name_length' => strlen($this->holderName),
+                'dob' => $this->dob,
+                'event_ticket_type_id' => $this->eventTicketTypeId,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Check if we have all required data
+            // Note: selectedTicketType is a computed property, so we need to check eventTicketTypeId directly
+            if (empty($this->holderName) || empty($this->dob) || !$this->eventTicketTypeId) {
+                $this->qrCodeText = '';
+                $this->qrCodeSvg = '';
+                Log::debug('[TicketGenerator] generateQrCode - missing required fields, cleared QR code', [
+                    'user_id' => auth()->id(),
+                    'has_holder_name' => !empty($this->holderName),
+                    'has_dob' => !empty($this->dob),
+                    'has_ticket_type_id' => !empty($this->eventTicketTypeId),
+                ]);
+                return;
+            }
+
+            // Get ticket type - handle case where it might not be loaded yet
+            $ticketType = $this->selectedTicketType;
+            if (!$ticketType) {
+                // Try to load it directly if computed property isn't available
+                $ticketType = EventTicketType::find($this->eventTicketTypeId);
+            }
+            
+            if (!$ticketType) {
+                $this->qrCodeText = '';
+                $this->qrCodeSvg = '';
+                Log::debug('[TicketGenerator] generateQrCode - ticket type not found', [
+                    'user_id' => auth()->id(),
+                    'event_ticket_type_id' => $this->eventTicketTypeId,
+                ]);
+                return;
+            }
+
+            // Use ticket type name for QR code generation
+            $ticketTypeName = strtoupper($ticketType->name);
+
+            Log::debug('[TicketGenerator] generateQrCode - generating secure ID', [
+                'user_id' => auth()->id(),
+                'ticket_type_name' => $ticketTypeName,
+            ]);
+
+            // Generate secure ID
+            $this->qrCodeText = TicketIdGenerator::generateSecureId(
+                $ticketTypeName,
+                $this->dob,
+                $this->holderName
             );
-            $writer = new Writer($renderer);
-            $this->qrCodeSvg = $writer->writeString($this->qrCodeText);
+
+            Log::debug('[TicketGenerator] generateQrCode - secure ID generated', [
+                'user_id' => auth()->id(),
+                'qr_code_text_length' => strlen($this->qrCodeText),
+                'qr_code_text_preview' => substr($this->qrCodeText, 0, 20) . '...',
+            ]);
+
+            // Generate QR code SVG
+            try {
+                $renderer = new ImageRenderer(
+                    new RendererStyle(400),
+                    new SvgImageBackEnd()
+                );
+                $writer = new Writer($renderer);
+                $this->qrCodeSvg = $writer->writeString($this->qrCodeText);
+
+                Log::debug('[TicketGenerator] generateQrCode - QR code SVG generated', [
+                    'user_id' => auth()->id(),
+                    'svg_length' => strlen($this->qrCodeSvg),
+                ]);
+            } catch (\Exception $e) {
+                $this->qrCodeSvg = '';
+                Log::error('[TicketGenerator] generateQrCode - failed to generate QR code SVG', [
+                    'user_id' => auth()->id(),
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                    'file' => $e->getFile(),
+                    'line' => $e->getLine(),
+                ]);
+            }
+
+            Log::info('[TicketGenerator] generateQrCode completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
         } catch (\Exception $e) {
-            $this->qrCodeSvg = '';
+            Log::error('[TicketGenerator] generateQrCode failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
     }
 
     /**
      * Save ticket to database.
      */
-    public function saveTicket(): void
+    public function saveTicket()
     {
-        $validated = $this->validate([
-            'eventId' => ['required', 'exists:events,id'],
-            'holderName' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255'],
-            'dob' => ['required', 'date', 'date_format:Y-m-d'],
-            'eventTicketTypeId' => ['required', 'exists:event_ticket_types,id'],
-        ]);
+        try {
+            Log::info('[TicketGenerator] saveTicket started', [
+                'user_id' => auth()->id(),
+                'input_before_sanitization' => [
+                    'event_id' => $this->eventId,
+                    'holder_name' => $this->holderName,
+                    'email' => $this->email,
+                    'dob' => $this->dob,
+                    'event_ticket_type_id' => $this->eventTicketTypeId,
+                ],
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        // Ensure QR code is generated
-        if (empty($this->qrCodeText)) {
-            $this->generateQrCode();
-        }
+            // Sanitize holderName before validation
+            $this->holderName = $this->sanitizeInput($this->holderName) ?? '';
 
-        // Generate payment reference
-        $this->paymentRef = TicketIdGenerator::generatePaymentRef($this->holderName);
+            Log::debug('[TicketGenerator] saveTicket - holderName sanitized', [
+                'user_id' => auth()->id(),
+                'sanitized_holder_name' => $this->holderName,
+            ]);
 
-        // Check if ticket with this QR code already exists
-        $existingTicket = Ticket::where('qr_code_text', $this->qrCodeText)->first();
-        if ($existingTicket) {
-            $this->addError('qrCodeText', 'A ticket with this ID already exists. Please try again.');
-            return;
-        }
+            $validated = $this->validate([
+                'eventId' => ['required', 'exists:events,id'],
+                'holderName' => ['required', 'string', 'max:255'],
+                'email' => ['required', 'email', 'max:255'],
+                'dob' => ['required', 'date', 'date_format:Y-m-d'],
+                'eventTicketTypeId' => ['required', 'exists:event_ticket_types,id'],
+            ]);
 
-        // Check if payment reference already exists (retry if needed)
-        $existingPaymentRef = Ticket::where('payment_ref', $this->paymentRef)->first();
-        if ($existingPaymentRef) {
+            Log::debug('[TicketGenerator] saveTicket - validation passed', [
+                'user_id' => auth()->id(),
+                'validated_data' => $validated,
+            ]);
+
+            // Ensure QR code is generated
+            if (empty($this->qrCodeText)) {
+                Log::debug('[TicketGenerator] saveTicket - QR code empty, generating', [
+                    'user_id' => auth()->id(),
+                ]);
+                $this->generateQrCode();
+            }
+
+            // Generate payment reference
             $this->paymentRef = TicketIdGenerator::generatePaymentRef($this->holderName);
-            $existingPaymentRef = Ticket::where('payment_ref', $this->paymentRef)->first();
-            if ($existingPaymentRef) {
-                $this->addError('paymentRef', 'Payment reference conflict. Please try again.');
+
+            Log::debug('[TicketGenerator] saveTicket - payment reference generated', [
+                'user_id' => auth()->id(),
+                'payment_ref' => $this->paymentRef,
+            ]);
+
+            // Check if ticket with this QR code already exists
+            $existingTicket = Ticket::where('qr_code_text', $this->qrCodeText)->first();
+            if ($existingTicket) {
+                Log::warning('[TicketGenerator] saveTicket - duplicate QR code found', [
+                    'user_id' => auth()->id(),
+                    'qr_code_text' => $this->qrCodeText,
+                    'existing_ticket_id' => $existingTicket->id,
+                ]);
+                $this->addError('qrCodeText', 'A ticket with this ID already exists. Please try again.');
                 return;
             }
+
+            // Check if payment reference already exists (retry if needed)
+            $existingPaymentRef = Ticket::where('payment_ref', $this->paymentRef)->first();
+            if ($existingPaymentRef) {
+                Log::debug('[TicketGenerator] saveTicket - payment reference conflict, retrying', [
+                    'user_id' => auth()->id(),
+                    'payment_ref' => $this->paymentRef,
+                ]);
+                $this->paymentRef = TicketIdGenerator::generatePaymentRef($this->holderName);
+                $existingPaymentRef = Ticket::where('payment_ref', $this->paymentRef)->first();
+                if ($existingPaymentRef) {
+                    Log::error('[TicketGenerator] saveTicket - payment reference conflict after retry', [
+                        'user_id' => auth()->id(),
+                        'payment_ref' => $this->paymentRef,
+                    ]);
+                    $this->addError('paymentRef', 'Payment reference conflict. Please try again.');
+                    return;
+                }
+            }
+
+            // Get ticket type to inherit VIP status
+            $ticketType = EventTicketType::find($this->eventTicketTypeId);
+            if (!$ticketType) {
+                Log::error('[TicketGenerator] saveTicket - ticket type not found', [
+                    'user_id' => auth()->id(),
+                    'event_ticket_type_id' => $this->eventTicketTypeId,
+                ]);
+                throw new \Exception('Ticket type not found');
+            }
+
+            Log::debug('[TicketGenerator] saveTicket - creating ticket', [
+                'user_id' => auth()->id(),
+                'ticket_data' => [
+                    'event_id' => $this->eventId,
+                    'event_ticket_type_id' => $this->eventTicketTypeId,
+                    'holder_name' => $this->holderName,
+                    'email' => $this->email,
+                    'is_vip' => $ticketType->is_vip,
+                ],
+            ]);
+
+            // Create ticket with is_verified = false (default)
+            $ticket = Ticket::create([
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+                'event_ticket_type_id' => $this->eventTicketTypeId,
+                'qr_code_text' => $this->qrCodeText,
+                'holder_name' => $this->holderName,
+                'email' => $this->email,
+                'dob' => $this->dob,
+                'payment_ref' => $this->paymentRef,
+                'is_verified' => false,
+                'is_vip' => $ticketType->is_vip,
+            ]);
+
+            Log::info('[TicketGenerator] saveTicket - ticket created', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $ticket->id,
+            ]);
+
+            // Store payment reference in session for display after redirect
+            Session::flash('ticket-saved', 'Ticket created successfully! Payment reference: ' . $this->paymentRef);
+            Session::flash('ticket-payment-ref', $this->paymentRef);
+
+            Log::info('[TicketGenerator] saveTicket completed successfully, redirecting', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $ticket->id,
+                'payment_ref' => $this->paymentRef,
+            ]);
+
+            // Redirect to same page to refresh component and reset JavaScript state
+            return $this->redirect(route('tickets.new'), navigate: true);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[TicketGenerator] saveTicket - validation failed', [
+                'user_id' => auth()->id(),
+                'errors' => $e->errors(),
+                'input' => [
+                    'event_id' => $this->eventId,
+                    'holder_name' => $this->holderName,
+                    'email' => $this->email,
+                    'dob' => $this->dob,
+                    'event_ticket_type_id' => $this->eventTicketTypeId,
+                ],
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] saveTicket failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'input' => [
+                    'event_id' => $this->eventId,
+                    'holder_name' => $this->holderName,
+                    'email' => $this->email,
+                    'dob' => $this->dob,
+                    'event_ticket_type_id' => $this->eventTicketTypeId,
+                ],
+            ]);
+            throw $e;
         }
-
-        // Get ticket type to inherit VIP status
-        $ticketType = EventTicketType::find($this->eventTicketTypeId);
-
-        // Create ticket with is_verified = false (default)
-        Ticket::create([
-            'user_id' => auth()->id(),
-            'event_id' => $this->eventId,
-            'event_ticket_type_id' => $this->eventTicketTypeId,
-            'qr_code_text' => $this->qrCodeText,
-            'holder_name' => $this->holderName,
-            'email' => $this->email,
-            'dob' => $this->dob,
-            'payment_ref' => $this->paymentRef,
-            'is_verified' => false,
-            'is_vip' => $ticketType->is_vip,
-        ]);
-
-        // Store QR code and payment reference before resetting
-        $this->lastSavedQrCodeText = $this->qrCodeText;
-        $this->lastSavedQrCodeSvg = $this->qrCodeSvg;
-        $this->lastSavedPaymentRef = $this->paymentRef;
-
-        // Reset form to allow creating another ticket (keep event selection)
-        $this->reset(['holderName', 'email', 'dob', 'eventTicketTypeId', 'qrCodeText', 'qrCodeSvg', 'paymentRef']);
-
-        Session::flash('ticket-saved', 'Ticket created successfully! Payment reference: ' . $this->lastSavedPaymentRef . ' - Please complete payment using the options below.');
     }
 
-    /**
-     * Get SnapScan payment URL
-     */
-    public function getSnapscanUrlProperty(): string
-    {
-        return env('SNAPSCAN_PAYMENT_URL', 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ');
-    }
 }; ?>
 
 <section class="w-full space-y-6">
@@ -213,62 +588,21 @@ new class extends Component {
     </div>
 
     @if (session('ticket-saved'))
-        <flux:callout variant="success" icon="check-circle" heading="{{ session('ticket-saved') }}" />
+        <flux:callout variant="success" icon="check-circle">
+            <flux:heading size="md" class="mb-2">{{ session('ticket-saved') }}</flux:heading>
+            @if (session('ticket-payment-ref'))
+                <flux:text class="mb-3">
+                    Payment Reference: <strong class="font-mono">{{ session('ticket-payment-ref') }}</strong>
+                </flux:text>
+            @endif
+            <flux:link href="{{ route('my.tickets') }}" variant="primary" wire:navigate>
+                View in My Tickets →
+            </flux:link>
+        </flux:callout>
     @endif
 
-    <!-- Payment Options Section -->
-    <div class="p-6 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700 space-y-6">
-        <flux:heading size="lg" class="text-green-700 dark:text-green-400">Payment Options</flux:heading>
-        
-        <!-- SnapScan Payment -->
-        <div class="p-4 bg-white dark:bg-neutral-800 rounded-lg border border-green-200 dark:border-green-700">
-            <flux:text class="text-sm font-semibold text-green-900 dark:text-green-300 mb-2 block">Pay with SnapScan:</flux:text>
-                        <flux:link 
-                            href="{{ $this->snapscanUrl }}" 
-                            variant="primary"
-                            class="inline-flex items-center gap-2"
-                        >
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-                Open SnapScan Payment
-            </flux:link>
-            <flux:text class="text-xs text-green-700 dark:text-green-400 mt-2 block">
-                Click to open SnapScan and complete your payment. Use your Payment Reference as the reference.
-            </flux:text>
-        </div>
-
-        <!-- Banking Details -->
-        <div>
-            <flux:text class="text-sm font-semibold text-green-900 dark:text-green-300 mb-3 block">Or pay via Bank Transfer:</flux:text>
-            <div class="grid gap-4 md:grid-cols-2">
-                <div class="space-y-2">
-                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Bank Name:</flux:text>
-                    <flux:text class="text-base text-green-900 dark:text-green-200">{{ env('BANK_NAME', 'Standard Bank') }}</flux:text>
-                </div>
-                <div class="space-y-2">
-                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Account Holder:</flux:text>
-                    <flux:text class="text-base text-green-900 dark:text-green-200">{{ env('BANK_ACCOUNT_HOLDER', 'Student Bash') }}</flux:text>
-                </div>
-                <div class="space-y-2">
-                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Account Number:</flux:text>
-                    <flux:text class="text-base font-mono text-green-900 dark:text-green-200">{{ env('BANK_ACCOUNT_NUMBER', '1234567890') }}</flux:text>
-                </div>
-                <div class="space-y-2">
-                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Branch Code:</flux:text>
-                    <flux:text class="text-base text-green-900 dark:text-green-200">{{ env('BANK_BRANCH_CODE', '051001') }}</flux:text>
-                </div>
-                <div class="space-y-2 md:col-span-2">
-                    <flux:text class="text-xs font-medium text-green-800 dark:text-green-300 uppercase">Reference:</flux:text>
-                    <flux:text class="text-sm text-green-900 dark:text-green-200">Use your <strong>Payment Reference</strong> (generated after ticket creation) as the payment reference</flux:text>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="grid gap-6 md:grid-cols-2">
-        <!-- Form Section -->
-        <div class="space-y-6">
+    <!-- Form Section -->
+    <div class="space-y-6">
             <form wire:submit="saveTicket" class="space-y-6">
                 <flux:select
                     wire:model.live="eventId"
@@ -371,78 +705,6 @@ new class extends Component {
                 </flux:button>
             </form>
         </div>
-
-        <!-- QR Code Section -->
-        <div class="space-y-4">
-            <div>
-                <flux:heading size="lg">QR Code</flux:heading>
-                @if (!empty($lastSavedQrCodeText))
-                    <flux:text class="mt-2">Last Saved Ticket ID: {{ $lastSavedQrCodeText }}</flux:text>
-                @else
-                    <flux:text class="mt-2">Ticket ID: {{ $qrCodeText ?: 'Fill in the form to generate' }}</flux:text>
-                @endif
-            </div>
-
-            @if (!empty($lastSavedQrCodeSvg))
-                <div class="flex justify-center p-6 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <div class="w-full max-w-xs">
-                        {!! $lastSavedQrCodeSvg !!}
-                    </div>
-                </div>
-                <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <flux:text class="text-xs font-mono break-all">{{ $lastSavedQrCodeText }}</flux:text>
-                </div>
-            @elseif (!empty($qrCodeSvg))
-                <div class="flex justify-center p-6 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <div class="w-full max-w-xs">
-                        {!! $qrCodeSvg !!}
-                    </div>
-                </div>
-                <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <flux:text class="text-xs font-mono break-all">{{ $qrCodeText }}</flux:text>
-                </div>
-            @else
-                <div class="flex items-center justify-center h-64 bg-neutral-100 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <flux:text class="text-neutral-500">QR code will appear here</flux:text>
-                </div>
-            @endif
-        </div>
     </div>
-
-    <!-- Payment Instructions -->
-    @if (!empty($lastSavedPaymentRef))
-        <div class="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-500 dark:border-blue-500 space-y-4">
-            <div>
-                <flux:heading size="lg" class="text-blue-700 dark:text-blue-400">Payment Instructions</flux:heading>
-                <flux:text class="mt-2 text-blue-900 dark:text-blue-300">
-                    Your ticket has been generated but is <strong>inactive</strong> until payment is verified.
-                </flux:text>
-            </div>
-
-            <div class="p-4 bg-white dark:bg-neutral-800 rounded-lg border border-blue-200 dark:border-blue-700">
-                <flux:text class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-2">Your Payment Reference:</flux:text>
-                <flux:text class="text-2xl font-mono font-bold text-blue-700 dark:text-blue-400">{{ $lastSavedPaymentRef }}</flux:text>
-            </div>
-
-            <div class="space-y-2">
-                <flux:text class="font-semibold text-blue-900 dark:text-blue-300">Payment Methods:</flux:text>
-                <ul class="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-300">
-                    <li><strong>SnapScan:</strong> You will be redirected to SnapScan after ticket creation</li>
-                    <li><strong>Bank Transfer:</strong> Use payment reference <strong>{{ $lastSavedPaymentRef }}</strong> as your reference</li>
-                </ul>
-            </div>
-
-            <div class="space-y-2">
-                <flux:text class="font-semibold text-blue-900 dark:text-blue-300">Important:</flux:text>
-                <ul class="list-disc list-inside space-y-1 text-blue-800 dark:text-blue-300">
-                    <li>Always use <strong>{{ $lastSavedPaymentRef }}</strong> as your payment reference</li>
-                    <li>Your ticket will be activated after admin verifies your payment</li>
-                    <li>You will receive an email notification once payment is confirmed</li>
-                    <li>Do not share your payment reference with others</li>
-                </ul>
-            </div>
-
-        </div>
-    @endif
 </section>
 

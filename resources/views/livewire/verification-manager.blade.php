@@ -2,6 +2,7 @@
 
 use App\Models\Ticket;
 use App\Notifications\TicketVerifiedNotification;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Session;
 use Livewire\Volt\Component;
@@ -17,11 +18,43 @@ new class extends Component {
     public string $sortDirection = 'desc';
 
     /**
+     * Sanitize input to only allow letters, digits, and hyphens
+     */
+    private function sanitizeInput(?string $value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+        $sanitized = preg_replace('/[^a-zA-Z0-9\-]/', '', $value);
+        return $sanitized === '' ? null : $sanitized;
+    }
+
+    /**
      * Mount the component.
      */
     public function mount(): void
     {
-        // Component uses computed properties, no initialization needed
+        try {
+            Log::info('[VerificationManager] mount started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Component uses computed properties, no initialization needed
+
+            Log::info('[VerificationManager] mount completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[VerificationManager] mount failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -29,15 +62,69 @@ new class extends Component {
      */
     public function searchPaymentRef(): void
     {
-        $this->reset(['foundTicket']);
+        try {
+            Log::info('[VerificationManager] searchPaymentRef started', [
+                'user_id' => auth()->id(),
+                'search_payment_ref_before_sanitization' => $this->searchPaymentRef,
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        if (empty($this->searchPaymentRef)) {
-            return;
+            $this->reset(['foundTicket']);
+
+            if (empty($this->searchPaymentRef)) {
+                Log::debug('[VerificationManager] searchPaymentRef - empty search term', [
+                    'user_id' => auth()->id(),
+                ]);
+                return;
+            }
+
+            // Sanitize before querying
+            $sanitizedSearch = $this->sanitizeInput($this->searchPaymentRef);
+            if (empty($sanitizedSearch)) {
+                Log::warning('[VerificationManager] searchPaymentRef - search term became empty after sanitization', [
+                    'user_id' => auth()->id(),
+                    'original_search' => $this->searchPaymentRef,
+                ]);
+                return;
+            }
+
+            Log::debug('[VerificationManager] searchPaymentRef - searching with sanitized term', [
+                'user_id' => auth()->id(),
+                'sanitized_search' => $sanitizedSearch,
+            ]);
+
+            $this->foundTicket = Ticket::with(['ticketType', 'event'])
+                ->where('payment_ref', 'like', '%' . $sanitizedSearch . '%')
+                ->first();
+
+            if ($this->foundTicket) {
+                Log::info('[VerificationManager] searchPaymentRef - ticket found', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'payment_ref' => $this->foundTicket->payment_ref,
+                ]);
+            } else {
+                Log::debug('[VerificationManager] searchPaymentRef - no ticket found', [
+                    'user_id' => auth()->id(),
+                    'sanitized_search' => $sanitizedSearch,
+                ]);
+            }
+
+            Log::info('[VerificationManager] searchPaymentRef completed successfully', [
+                'user_id' => auth()->id(),
+                'ticket_found' => $this->foundTicket !== null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[VerificationManager] searchPaymentRef failed', [
+                'user_id' => auth()->id(),
+                'search_payment_ref' => $this->searchPaymentRef,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
-
-        $this->foundTicket = Ticket::with(['ticketType', 'event'])
-            ->where('payment_ref', 'like', '%' . trim($this->searchPaymentRef) . '%')
-            ->first();
     }
 
     /**
@@ -45,31 +132,86 @@ new class extends Component {
      */
     public function toggleVerification(Ticket $ticket): void
     {
-        $wasUnverified = !$ticket->is_verified;
-        
-        $ticket->update([
-            'is_verified' => !$ticket->is_verified,
-        ]);
+        try {
+            Log::info('[VerificationManager] toggleVerification started', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $ticket->id,
+                'current_verification_status' => $ticket->is_verified,
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        // If this was the found ticket, update it
-        if ($this->foundTicket && $this->foundTicket->id === $ticket->id) {
-            $this->foundTicket->refresh();
-        }
+            $wasUnverified = !$ticket->is_verified;
+            
+            $ticket->update([
+                'is_verified' => !$ticket->is_verified,
+            ]);
 
-        // Send email notification when ticket is verified
-        if ($wasUnverified && $ticket->is_verified && $ticket->email) {
-            try {
-                Notification::route('mail', $ticket->email)
-                    ->notify(new TicketVerifiedNotification($ticket));
-            } catch (\Exception $e) {
-                // Log error but don't fail the verification
-                \Log::error('Failed to send ticket verification email: ' . $e->getMessage());
+            Log::debug('[VerificationManager] toggleVerification - ticket updated', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $ticket->id,
+                'new_verification_status' => $ticket->is_verified,
+            ]);
+
+            // If this was the found ticket, update it
+            if ($this->foundTicket && $this->foundTicket->id === $ticket->id) {
+                $this->foundTicket->refresh();
+                Log::debug('[VerificationManager] toggleVerification - found ticket refreshed', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $ticket->id,
+                ]);
             }
-        }
 
-        Session::flash('verification-updated', $ticket->is_verified 
-            ? 'Ticket verified and email sent successfully!' 
-            : 'Verification status updated successfully!');
+            // Send email notification when ticket is verified
+            if ($wasUnverified && $ticket->is_verified && $ticket->email) {
+                try {
+                    Log::debug('[VerificationManager] toggleVerification - sending verification email', [
+                        'user_id' => auth()->id(),
+                        'ticket_id' => $ticket->id,
+                        'email' => $ticket->email,
+                    ]);
+
+                    Notification::route('mail', $ticket->email)
+                        ->notify(new TicketVerifiedNotification($ticket));
+
+                    Log::info('[VerificationManager] toggleVerification - verification email sent', [
+                        'user_id' => auth()->id(),
+                        'ticket_id' => $ticket->id,
+                        'email' => $ticket->email,
+                    ]);
+                } catch (\Exception $e) {
+                    // Log error but don't fail the verification
+                    Log::error('[VerificationManager] toggleVerification - failed to send verification email', [
+                        'user_id' => auth()->id(),
+                        'ticket_id' => $ticket->id,
+                        'email' => $ticket->email,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                        'file' => $e->getFile(),
+                        'line' => $e->getLine(),
+                    ]);
+                }
+            }
+
+            Session::flash('verification-updated', $ticket->is_verified 
+                ? 'Ticket verified and email sent successfully!' 
+                : 'Verification status updated successfully!');
+
+            Log::info('[VerificationManager] toggleVerification completed successfully', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $ticket->id,
+                'new_verification_status' => $ticket->is_verified,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[VerificationManager] toggleVerification failed', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $ticket->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -77,7 +219,30 @@ new class extends Component {
      */
     public function updateFilter(): void
     {
-        $this->resetPage();
+        try {
+            Log::debug('[VerificationManager] updateFilter started', [
+                'user_id' => auth()->id(),
+                'filter_status' => $this->filterStatus,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->resetPage();
+
+            Log::debug('[VerificationManager] updateFilter completed successfully', [
+                'user_id' => auth()->id(),
+                'filter_status' => $this->filterStatus,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[VerificationManager] updateFilter failed', [
+                'user_id' => auth()->id(),
+                'filter_status' => $this->filterStatus,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -85,13 +250,49 @@ new class extends Component {
      */
     public function updateSort(string $field): void
     {
-        if ($this->sortBy === $field) {
-            $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
-        } else {
-            $this->sortBy = $field;
-            $this->sortDirection = 'asc';
+        try {
+            Log::debug('[VerificationManager] updateSort started', [
+                'user_id' => auth()->id(),
+                'field' => $field,
+                'current_sort_by' => $this->sortBy,
+                'current_sort_direction' => $this->sortDirection,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            if ($this->sortBy === $field) {
+                $this->sortDirection = $this->sortDirection === 'asc' ? 'desc' : 'asc';
+                Log::debug('[VerificationManager] updateSort - toggled sort direction', [
+                    'user_id' => auth()->id(),
+                    'field' => $field,
+                    'new_direction' => $this->sortDirection,
+                ]);
+            } else {
+                $this->sortBy = $field;
+                $this->sortDirection = 'asc';
+                Log::debug('[VerificationManager] updateSort - changed sort field', [
+                    'user_id' => auth()->id(),
+                    'new_field' => $field,
+                    'new_direction' => $this->sortDirection,
+                ]);
+            }
+            $this->resetPage();
+
+            Log::debug('[VerificationManager] updateSort completed successfully', [
+                'user_id' => auth()->id(),
+                'sort_by' => $this->sortBy,
+                'sort_direction' => $this->sortDirection,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[VerificationManager] updateSort failed', [
+                'user_id' => auth()->id(),
+                'field' => $field,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
-        $this->resetPage();
     }
 
     /**
@@ -99,26 +300,70 @@ new class extends Component {
      */
     public function getTicketsProperty()
     {
-        $query = Ticket::with(['ticketType', 'event']);
+        try {
+            Log::debug('[VerificationManager] getTicketsProperty started', [
+                'user_id' => auth()->id(),
+                'filter_status' => $this->filterStatus,
+                'sort_by' => $this->sortBy,
+                'sort_direction' => $this->sortDirection,
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        // Apply filter
-        if ($this->filterStatus === 'verified') {
-            $query->where('is_verified', true);
-        } elseif ($this->filterStatus === 'unverified') {
-            $query->where('is_verified', false);
+            $query = Ticket::with(['ticketType', 'event']);
+
+            // Apply filter
+            if ($this->filterStatus === 'verified') {
+                $query->where('is_verified', true);
+                Log::debug('[VerificationManager] getTicketsProperty - filtering verified tickets', [
+                    'user_id' => auth()->id(),
+                ]);
+            } elseif ($this->filterStatus === 'unverified') {
+                $query->where('is_verified', false);
+                Log::debug('[VerificationManager] getTicketsProperty - filtering unverified tickets', [
+                    'user_id' => auth()->id(),
+                ]);
+            }
+
+            // Apply sort - handle relationship sorting
+            if ($this->sortBy === 'ticket_type') {
+                // Sort by ticket type name through relationship
+                $query->join('event_ticket_types', 'tickets.event_ticket_type_id', '=', 'event_ticket_types.id')
+                      ->orderBy('event_ticket_types.name', $this->sortDirection)
+                      ->select('tickets.*');
+                Log::debug('[VerificationManager] getTicketsProperty - sorting by ticket type', [
+                    'user_id' => auth()->id(),
+                    'direction' => $this->sortDirection,
+                ]);
+            } else {
+                $query->orderBy($this->sortBy, $this->sortDirection);
+                Log::debug('[VerificationManager] getTicketsProperty - sorting by field', [
+                    'user_id' => auth()->id(),
+                    'field' => $this->sortBy,
+                    'direction' => $this->sortDirection,
+                ]);
+            }
+
+            $tickets = $query->paginate(20);
+
+            Log::debug('[VerificationManager] getTicketsProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'tickets_count' => $tickets->count(),
+                'total' => $tickets->total(),
+            ]);
+
+            return $tickets;
+        } catch (\Exception $e) {
+            Log::error('[VerificationManager] getTicketsProperty failed', [
+                'user_id' => auth()->id(),
+                'filter_status' => $this->filterStatus,
+                'sort_by' => $this->sortBy,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
-
-        // Apply sort - handle relationship sorting
-        if ($this->sortBy === 'ticket_type') {
-            // Sort by ticket type name through relationship
-            $query->join('event_ticket_types', 'tickets.event_ticket_type_id', '=', 'event_ticket_types.id')
-                  ->orderBy('event_ticket_types.name', $this->sortDirection)
-                  ->select('tickets.*');
-        } else {
-            $query->orderBy($this->sortBy, $this->sortDirection);
-        }
-
-        return $query->paginate(20);
     }
 
     /**
@@ -126,11 +371,34 @@ new class extends Component {
      */
     public function getUnverifiedQueueProperty()
     {
-        return Ticket::with(['ticketType', 'event'])
-            ->where('is_verified', false)
-            ->orderBy('created_at', 'asc')
-            ->limit(10)
-            ->get();
+        try {
+            Log::debug('[VerificationManager] getUnverifiedQueueProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $queue = Ticket::with(['ticketType', 'event'])
+                ->where('is_verified', false)
+                ->orderBy('created_at', 'asc')
+                ->limit(10)
+                ->get();
+
+            Log::debug('[VerificationManager] getUnverifiedQueueProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'queue_count' => $queue->count(),
+            ]);
+
+            return $queue;
+        } catch (\Exception $e) {
+            Log::error('[VerificationManager] getUnverifiedQueueProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 }; ?>
 

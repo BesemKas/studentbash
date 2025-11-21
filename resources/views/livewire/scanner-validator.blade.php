@@ -3,6 +3,7 @@
 use App\Models\Ticket;
 use App\Models\Event;
 use App\Models\EventDate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Livewire\Volt\Component;
 
@@ -14,22 +15,89 @@ new class extends Component {
     public ?string $armbandInfo = null;
 
     /**
+     * Sanitize input to only allow letters, digits, and hyphens
+     */
+    private function sanitizeInput(?string $value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+        $sanitized = preg_replace('/[^a-zA-Z0-9\-]/', '', $value);
+        return $sanitized === '' ? null : $sanitized;
+    }
+
+    /**
      * Search for ticket by QR code text.
      */
     public function searchTicket(): void
     {
-        $this->reset(['foundTicket', 'statusMessage', 'statusType', 'armbandInfo']);
+        try {
+            Log::info('[ScannerValidator] searchTicket started', [
+                'user_id' => auth()->id(),
+                'search_id_before_sanitization' => $this->searchId,
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        if (empty($this->searchId)) {
-            return;
-        }
+            $this->reset(['foundTicket', 'statusMessage', 'statusType', 'armbandInfo']);
 
-        $this->foundTicket = Ticket::with(['event', 'ticketType'])
-            ->where('qr_code_text', trim($this->searchId))
-            ->first();
+            if (empty($this->searchId)) {
+                Log::debug('[ScannerValidator] searchTicket - empty search ID', [
+                    'user_id' => auth()->id(),
+                ]);
+                return;
+            }
 
-        if (!$this->foundTicket) {
-            $this->statusMessage = 'TICKET NOT FOUND';
+            // Sanitize before querying
+            $sanitizedSearch = $this->sanitizeInput($this->searchId);
+            if (empty($sanitizedSearch)) {
+                Log::warning('[ScannerValidator] searchTicket - search ID became empty after sanitization', [
+                    'user_id' => auth()->id(),
+                    'original_search' => $this->searchId,
+                ]);
+                $this->statusMessage = 'TICKET NOT FOUND';
+                $this->statusType = 'error';
+                return;
+            }
+
+            Log::debug('[ScannerValidator] searchTicket - searching with sanitized ID', [
+                'user_id' => auth()->id(),
+                'sanitized_search' => $sanitizedSearch,
+            ]);
+
+            $this->foundTicket = Ticket::with(['event', 'ticketType'])
+                ->where('qr_code_text', $sanitizedSearch)
+                ->first();
+
+            if (!$this->foundTicket) {
+                $this->statusMessage = 'TICKET NOT FOUND';
+                $this->statusType = 'error';
+                Log::warning('[ScannerValidator] searchTicket - ticket not found', [
+                    'user_id' => auth()->id(),
+                    'sanitized_search' => $sanitizedSearch,
+                ]);
+            } else {
+                Log::info('[ScannerValidator] searchTicket - ticket found', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'payment_ref' => $this->foundTicket->payment_ref,
+                    'is_verified' => $this->foundTicket->is_verified,
+                ]);
+            }
+
+            Log::info('[ScannerValidator] searchTicket completed successfully', [
+                'user_id' => auth()->id(),
+                'ticket_found' => $this->foundTicket !== null,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] searchTicket failed', [
+                'user_id' => auth()->id(),
+                'search_id' => $this->searchId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            $this->statusMessage = 'ERROR - Please try again';
             $this->statusType = 'error';
         }
     }
@@ -39,76 +107,160 @@ new class extends Component {
      */
     public function checkIn(): void
     {
-        if (!$this->foundTicket) {
-            $this->statusMessage = 'NO TICKET SELECTED';
+        try {
+            Log::info('[ScannerValidator] checkIn started', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $this->foundTicket?->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            if (!$this->foundTicket) {
+                $this->statusMessage = 'NO TICKET SELECTED';
+                $this->statusType = 'error';
+                Log::warning('[ScannerValidator] checkIn - no ticket selected', [
+                    'user_id' => auth()->id(),
+                ]);
+                return;
+            }
+
+            // PRIMARY SECURITY CHECK: Payment verification
+            if (!$this->foundTicket->is_verified) {
+                $this->statusMessage = '❌ DENIED: PAYMENT UNVERIFIED';
+                $this->statusType = 'error';
+                Log::warning('[ScannerValidator] checkIn - payment unverified', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'payment_ref' => $this->foundTicket->payment_ref,
+                ]);
+                return;
+            }
+
+            // Check if ticket is already used (one-time use)
+            if ($this->foundTicket->isUsed()) {
+                $this->statusMessage = 'DENIED - TICKET ALREADY USED';
+                $this->statusType = 'error';
+                Log::warning('[ScannerValidator] checkIn - ticket already used', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'used_at' => $this->foundTicket->used_at?->toIso8601String(),
+                ]);
+                return;
+            }
+
+            // Get active event
+            $activeEvent = Event::where('is_active', true)->first();
+            if (!$activeEvent) {
+                $this->statusMessage = 'NO ACTIVE EVENT - Please contact administrator';
+                $this->statusType = 'error';
+                Log::error('[ScannerValidator] checkIn - no active event', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                ]);
+                return;
+            }
+
+            Log::debug('[ScannerValidator] checkIn - active event found', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $this->foundTicket->id,
+                'active_event_id' => $activeEvent->id,
+            ]);
+
+            // Validate ticket belongs to active event
+            if ($this->foundTicket->event_id !== $activeEvent->id) {
+                $this->statusMessage = 'DENIED - TICKET NOT VALID FOR CURRENT EVENT';
+                $this->statusType = 'error';
+                Log::warning('[ScannerValidator] checkIn - ticket not valid for current event', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'ticket_event_id' => $this->foundTicket->event_id,
+                    'active_event_id' => $activeEvent->id,
+                ]);
+                return;
+            }
+
+            // Get current date and find matching EventDate
+            $currentDate = now()->format('Y-m-d');
+            $eventDate = $activeEvent->eventDates()
+                ->where('date', $currentDate)
+                ->first();
+
+            if (!$eventDate) {
+                $this->statusMessage = 'INVALID DATE - No event scheduled for today';
+                $this->statusType = 'error';
+                Log::warning('[ScannerValidator] checkIn - no event scheduled for today', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'current_date' => $currentDate,
+                    'active_event_id' => $activeEvent->id,
+                ]);
+                return;
+            }
+
+            Log::debug('[ScannerValidator] checkIn - event date found', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $this->foundTicket->id,
+                'event_date_id' => $eventDate->id,
+                'day_number' => $eventDate->day_number,
+            ]);
+
+            // Check if ticket type is valid for current date
+            if (!$this->foundTicket->ticketType) {
+                $this->statusMessage = 'INVALID TICKET - Ticket type not found';
+                $this->statusType = 'error';
+                Log::error('[ScannerValidator] checkIn - ticket type not found', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'event_ticket_type_id' => $this->foundTicket->event_ticket_type_id,
+                ]);
+                return;
+            }
+
+            if (!$this->foundTicket->ticketType->isValidForDate($eventDate->id)) {
+                $this->statusMessage = 'DENIED - TICKET NOT VALID FOR TODAY';
+                $this->statusType = 'error';
+                Log::warning('[ScannerValidator] checkIn - ticket not valid for today', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'event_date_id' => $eventDate->id,
+                    'ticket_type_id' => $this->foundTicket->ticketType->id,
+                ]);
+                return;
+            }
+
+            // Mark ticket as used
+            $this->foundTicket->markAsUsed();
+
+            Log::info('[ScannerValidator] checkIn - ticket marked as used', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $this->foundTicket->id,
+                'used_at' => $this->foundTicket->used_at?->toIso8601String(),
+            ]);
+
+            // Get armband information
+            $this->armbandInfo = $this->foundTicket->getArmbandInfo();
+
+            $this->statusMessage = 'ENTRY GRANTED';
+            $this->statusType = 'success';
+
+            Session::flash('checkin-success', 'Ticket checked in successfully!');
+
+            Log::info('[ScannerValidator] checkIn completed successfully', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $this->foundTicket->id,
+                'armband_info' => $this->armbandInfo,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] checkIn failed', [
+                'user_id' => auth()->id(),
+                'ticket_id' => $this->foundTicket->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            $this->statusMessage = 'ERROR - Please contact administrator';
             $this->statusType = 'error';
-            return;
         }
-
-        // PRIMARY SECURITY CHECK: Payment verification
-        if (!$this->foundTicket->is_verified) {
-            $this->statusMessage = '❌ DENIED: PAYMENT UNVERIFIED';
-            $this->statusType = 'error';
-            return;
-        }
-
-        // Check if ticket is already used (one-time use)
-        if ($this->foundTicket->isUsed()) {
-            $this->statusMessage = 'DENIED - TICKET ALREADY USED';
-            $this->statusType = 'error';
-            return;
-        }
-
-        // Get active event
-        $activeEvent = Event::where('is_active', true)->first();
-        if (!$activeEvent) {
-            $this->statusMessage = 'NO ACTIVE EVENT - Please contact administrator';
-            $this->statusType = 'error';
-            return;
-        }
-
-        // Validate ticket belongs to active event
-        if ($this->foundTicket->event_id !== $activeEvent->id) {
-            $this->statusMessage = 'DENIED - TICKET NOT VALID FOR CURRENT EVENT';
-            $this->statusType = 'error';
-            return;
-        }
-
-        // Get current date and find matching EventDate
-        $currentDate = now()->format('Y-m-d');
-        $eventDate = $activeEvent->eventDates()
-            ->where('date', $currentDate)
-            ->first();
-
-        if (!$eventDate) {
-            $this->statusMessage = 'INVALID DATE - No event scheduled for today';
-            $this->statusType = 'error';
-            return;
-        }
-
-        // Check if ticket type is valid for current date
-        if (!$this->foundTicket->ticketType) {
-            $this->statusMessage = 'INVALID TICKET - Ticket type not found';
-            $this->statusType = 'error';
-            return;
-        }
-
-        if (!$this->foundTicket->ticketType->isValidForDate($eventDate->id)) {
-            $this->statusMessage = 'DENIED - TICKET NOT VALID FOR TODAY';
-            $this->statusType = 'error';
-            return;
-        }
-
-        // Mark ticket as used
-        $this->foundTicket->markAsUsed();
-
-        // Get armband information
-        $this->armbandInfo = $this->foundTicket->getArmbandInfo();
-
-        $this->statusMessage = 'ENTRY GRANTED';
-        $this->statusType = 'success';
-
-        Session::flash('checkin-success', 'Ticket checked in successfully!');
     }
 
     /**
@@ -116,7 +268,27 @@ new class extends Component {
      */
     public function resetSearch(): void
     {
-        $this->reset(['searchId', 'foundTicket', 'statusMessage', 'statusType', 'armbandInfo']);
+        try {
+            Log::debug('[ScannerValidator] resetSearch started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->reset(['searchId', 'foundTicket', 'statusMessage', 'statusType', 'armbandInfo']);
+
+            Log::debug('[ScannerValidator] resetSearch completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] resetSearch failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -124,7 +296,30 @@ new class extends Component {
      */
     public function getActiveEventProperty()
     {
-        return Event::where('is_active', true)->first();
+        try {
+            Log::debug('[ScannerValidator] getActiveEventProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $activeEvent = Event::where('is_active', true)->first();
+
+            Log::debug('[ScannerValidator] getActiveEventProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'active_event_id' => $activeEvent?->id,
+            ]);
+
+            return $activeEvent;
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] getActiveEventProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -132,14 +327,41 @@ new class extends Component {
      */
     public function getCurrentEventDateProperty()
     {
-        $activeEvent = $this->activeEvent;
-        if (!$activeEvent) {
-            return null;
-        }
+        try {
+            Log::debug('[ScannerValidator] getCurrentEventDateProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        return $activeEvent->eventDates()
-            ->where('date', now()->format('Y-m-d'))
-            ->first();
+            $activeEvent = $this->activeEvent;
+            if (!$activeEvent) {
+                Log::debug('[ScannerValidator] getCurrentEventDateProperty - no active event', [
+                    'user_id' => auth()->id(),
+                ]);
+                return null;
+            }
+
+            $currentDate = $activeEvent->eventDates()
+                ->where('date', now()->format('Y-m-d'))
+                ->first();
+
+            Log::debug('[ScannerValidator] getCurrentEventDateProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'active_event_id' => $activeEvent->id,
+                'current_event_date_id' => $currentDate?->id,
+            ]);
+
+            return $currentDate;
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] getCurrentEventDateProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 }; ?>
 

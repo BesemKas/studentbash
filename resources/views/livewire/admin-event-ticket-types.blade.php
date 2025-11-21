@@ -2,6 +2,7 @@
 
 use App\Models\Event;
 use App\Models\EventTicketType;
+use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -16,11 +17,46 @@ new class extends Component {
     public ?float $price = null;
 
     /**
+     * Sanitize input to only allow letters, digits, and hyphens
+     */
+    private function sanitizeInput(?string $value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+        $sanitized = preg_replace('/[^a-zA-Z0-9\-]/', '', $value);
+        return $sanitized === '' ? null : $sanitized;
+    }
+
+    /**
      * Mount the component
      */
     public function mount(Event $event): void
     {
-        $this->event = $event;
+        try {
+            Log::info('[AdminEventTicketTypes] mount started', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->event = $event;
+
+            Log::info('[AdminEventTicketTypes] mount completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] mount failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -28,7 +64,30 @@ new class extends Component {
      */
     public function resetForm(): void
     {
-        $this->reset(['name', 'description', 'is_vip', 'allowed_dates', 'armband_color', 'price', 'editingTicketType', 'showForm']);
+        try {
+            Log::debug('[AdminEventTicketTypes] resetForm started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->reset(['name', 'description', 'is_vip', 'allowed_dates', 'armband_color', 'price', 'editingTicketType', 'showForm']);
+
+            Log::debug('[AdminEventTicketTypes] resetForm completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] resetForm failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -36,8 +95,31 @@ new class extends Component {
      */
     public function createTicketType(): void
     {
-        $this->resetForm();
-        $this->showForm = true;
+        try {
+            Log::info('[AdminEventTicketTypes] createTicketType started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->resetForm();
+            $this->showForm = true;
+
+            Log::info('[AdminEventTicketTypes] createTicketType completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] createTicketType failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -45,14 +127,44 @@ new class extends Component {
      */
     public function editTicketType(EventTicketType $ticketType): void
     {
-        $this->editingTicketType = $ticketType;
-        $this->name = $ticketType->name;
-        $this->description = $ticketType->description ?? '';
-        $this->is_vip = $ticketType->is_vip;
-        $this->allowed_dates = $ticketType->allowed_dates ?? [];
-        $this->armband_color = $ticketType->armband_color;
-        $this->price = $ticketType->price;
-        $this->showForm = true;
+        try {
+            Log::info('[AdminEventTicketTypes] editTicketType started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'ticket_type_id' => $ticketType->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->editingTicketType = $ticketType;
+            // Sanitize name, description, and armband_color when loading
+            $this->name = $this->sanitizeInput($ticketType->name) ?? $ticketType->name;
+            $this->description = $this->sanitizeInput($ticketType->description) ?? ($ticketType->description ?? '');
+            $this->is_vip = $ticketType->is_vip;
+            $this->allowed_dates = $ticketType->allowed_dates ?? [];
+            $this->armband_color = $this->sanitizeInput($ticketType->armband_color) ?? $ticketType->armband_color;
+            $this->price = $ticketType->price;
+            $this->showForm = true;
+
+            Log::info('[AdminEventTicketTypes] editTicketType completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'ticket_type_id' => $ticketType->id,
+                'sanitized_name' => $this->name,
+                'sanitized_description' => $this->description,
+                'sanitized_armband_color' => $this->armband_color,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] editTicketType failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'ticket_type_id' => $ticketType->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -60,33 +172,128 @@ new class extends Component {
      */
     public function saveTicketType(): void
     {
-        $validated = $this->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'is_vip' => ['boolean'],
-            'allowed_dates' => ['nullable', 'array'],
-            'allowed_dates.*' => ['exists:event_dates,id'],
-            'armband_color' => ['nullable', 'string', 'max:50'],
-            'price' => ['nullable', 'numeric', 'min:0'],
-        ]);
+        try {
+            Log::info('[AdminEventTicketTypes] saveTicketType started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'is_editing' => $this->editingTicketType !== null,
+                'ticket_type_id' => $this->editingTicketType?->id,
+                'input_before_sanitization' => [
+                    'name' => $this->name,
+                    'description' => $this->description,
+                    'is_vip' => $this->is_vip,
+                    'allowed_dates' => $this->allowed_dates,
+                    'armband_color' => $this->armband_color,
+                    'price' => $this->price,
+                ],
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        // If allowed_dates is empty, set to null (full pass)
-        if (empty($validated['allowed_dates'])) {
-            $validated['allowed_dates'] = null;
+            // Sanitize inputs before validation
+            $this->name = $this->sanitizeInput($this->name) ?? '';
+            $this->description = $this->sanitizeInput($this->description) ?? '';
+            $this->armband_color = $this->sanitizeInput($this->armband_color);
+
+            Log::debug('[AdminEventTicketTypes] saveTicketType - inputs sanitized', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'sanitized_name' => $this->name,
+                'sanitized_description' => $this->description,
+                'sanitized_armband_color' => $this->armband_color,
+            ]);
+
+            $validated = $this->validate([
+                'name' => ['required', 'string', 'max:255'],
+                'description' => ['nullable', 'string'],
+                'is_vip' => ['boolean'],
+                'allowed_dates' => ['nullable', 'array'],
+                'allowed_dates.*' => ['exists:event_dates,id'],
+                'armband_color' => ['nullable', 'string', 'max:50'],
+                'price' => ['nullable', 'numeric', 'min:0'],
+            ]);
+
+            Log::debug('[AdminEventTicketTypes] saveTicketType - validation passed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'validated_data' => $validated,
+            ]);
+
+            // If allowed_dates is empty, set to null (full pass)
+            if (empty($validated['allowed_dates'])) {
+                $validated['allowed_dates'] = null;
+            }
+
+            $validated['event_id'] = $this->event->id;
+
+            if ($this->editingTicketType) {
+                $this->editingTicketType->update($validated);
+                session()->flash('ticket-type-updated', 'Ticket type updated successfully!');
+                Log::info('[AdminEventTicketTypes] saveTicketType - ticket type updated', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                    'ticket_type_id' => $this->editingTicketType->id,
+                ]);
+            } else {
+                $ticketType = EventTicketType::create($validated);
+                session()->flash('ticket-type-created', 'Ticket type created successfully!');
+                Log::info('[AdminEventTicketTypes] saveTicketType - ticket type created', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                    'ticket_type_id' => $ticketType->id,
+                ]);
+            }
+
+            $this->resetForm();
+            
+            try {
+                $this->event->refresh();
+                Log::debug('[AdminEventTicketTypes] saveTicketType - event refreshed', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('[AdminEventTicketTypes] saveTicketType - failed to refresh event', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                    'error' => $e->getMessage(),
+                ]);
+                // Don't throw - this is not critical
+            }
+
+            Log::info('[AdminEventTicketTypes] saveTicketType completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[AdminEventTicketTypes] saveTicketType - validation failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'errors' => $e->errors(),
+                'input' => [
+                    'name' => $this->name,
+                    'description' => $this->description,
+                    'armband_color' => $this->armband_color,
+                    'price' => $this->price,
+                ],
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] saveTicketType failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'input' => [
+                    'name' => $this->name,
+                    'description' => $this->description,
+                    'armband_color' => $this->armband_color,
+                    'price' => $this->price,
+                ],
+            ]);
+            throw $e;
         }
-
-        $validated['event_id'] = $this->event->id;
-
-        if ($this->editingTicketType) {
-            $this->editingTicketType->update($validated);
-            session()->flash('ticket-type-updated', 'Ticket type updated successfully!');
-        } else {
-            EventTicketType::create($validated);
-            session()->flash('ticket-type-created', 'Ticket type created successfully!');
-        }
-
-        $this->resetForm();
-        $this->event->refresh();
     }
 
     /**
@@ -94,9 +301,50 @@ new class extends Component {
      */
     public function deleteTicketType(EventTicketType $ticketType): void
     {
-        $ticketType->delete();
-        session()->flash('ticket-type-deleted', 'Ticket type deleted successfully!');
-        $this->event->refresh();
+        try {
+            Log::info('[AdminEventTicketTypes] deleteTicketType started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'ticket_type_id' => $ticketType->id,
+                'ticket_type_name' => $ticketType->name,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $ticketType->delete();
+            session()->flash('ticket-type-deleted', 'Ticket type deleted successfully!');
+            
+            try {
+                $this->event->refresh();
+                Log::debug('[AdminEventTicketTypes] deleteTicketType - event refreshed', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('[AdminEventTicketTypes] deleteTicketType - failed to refresh event', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                    'error' => $e->getMessage(),
+                ]);
+                // Don't throw - this is not critical
+            }
+
+            Log::info('[AdminEventTicketTypes] deleteTicketType completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'ticket_type_id' => $ticketType->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] deleteTicketType failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'ticket_type_id' => $ticketType->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -104,7 +352,33 @@ new class extends Component {
      */
     public function getEventDatesProperty()
     {
-        return $this->event->eventDates()->orderBy('date')->get();
+        try {
+            Log::debug('[AdminEventTicketTypes] getEventDatesProperty started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $eventDates = $this->event->eventDates()->orderBy('date')->get();
+
+            Log::debug('[AdminEventTicketTypes] getEventDatesProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'event_dates_count' => $eventDates->count(),
+            ]);
+
+            return $eventDates;
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] getEventDatesProperty failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -112,7 +386,33 @@ new class extends Component {
      */
     public function getTicketTypesProperty()
     {
-        return $this->event->ticketTypes()->orderBy('name')->get();
+        try {
+            Log::debug('[AdminEventTicketTypes] getTicketTypesProperty started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $ticketTypes = $this->event->ticketTypes()->orderBy('name')->get();
+
+            Log::debug('[AdminEventTicketTypes] getTicketTypesProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'ticket_types_count' => $ticketTypes->count(),
+            ]);
+
+            return $ticketTypes;
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] getTicketTypesProperty failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 }; ?>
 

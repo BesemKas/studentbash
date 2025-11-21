@@ -18,6 +18,10 @@ Volt::route('my-tickets', 'my-tickets')
     ->middleware(['auth'])
     ->name('my.tickets');
 
+// How to Pay route (public access)
+Volt::route('how-to-pay', 'how-to-pay')
+    ->name('how-to-pay');
+
 // Gate validation route (admin role only)
 Volt::route('gate', 'scanner-validator')
     ->middleware(['auth'])

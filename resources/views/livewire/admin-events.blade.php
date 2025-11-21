@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Event;
+use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 use Livewire\WithPagination;
 
@@ -16,11 +17,43 @@ new class extends Component {
     public bool $is_active = true;
 
     /**
+     * Sanitize input to only allow letters, digits, and hyphens
+     */
+    private function sanitizeInput(?string $value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+        $sanitized = preg_replace('/[^a-zA-Z0-9\-]/', '', $value);
+        return $sanitized === '' ? null : $sanitized;
+    }
+
+    /**
      * Reset form fields
      */
     public function resetForm(): void
     {
-        $this->reset(['name', 'location', 'start_date', 'end_date', 'is_active', 'editingEvent', 'showForm']);
+        try {
+            Log::debug('[AdminEvents] resetForm started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->reset(['name', 'location', 'start_date', 'end_date', 'is_active', 'editingEvent', 'showForm']);
+
+            Log::debug('[AdminEvents] resetForm completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEvents] resetForm failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -28,8 +61,28 @@ new class extends Component {
      */
     public function createEvent(): void
     {
-        $this->resetForm();
-        $this->showForm = true;
+        try {
+            Log::info('[AdminEvents] createEvent started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->resetForm();
+            $this->showForm = true;
+
+            Log::info('[AdminEvents] createEvent completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEvents] createEvent failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -37,13 +90,39 @@ new class extends Component {
      */
     public function editEvent(Event $event): void
     {
-        $this->editingEvent = $event;
-        $this->name = $event->name;
-        $this->location = $event->location;
-        $this->start_date = $event->start_date->format('Y-m-d');
-        $this->end_date = $event->end_date->format('Y-m-d');
-        $this->is_active = $event->is_active;
-        $this->showForm = true;
+        try {
+            Log::info('[AdminEvents] editEvent started', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->editingEvent = $event;
+            // Sanitize name and location when loading
+            $this->name = $this->sanitizeInput($event->name) ?? $event->name;
+            $this->location = $this->sanitizeInput($event->location) ?? $event->location;
+            $this->start_date = $event->start_date->format('Y-m-d');
+            $this->end_date = $event->end_date->format('Y-m-d');
+            $this->is_active = $event->is_active;
+            $this->showForm = true;
+
+            Log::info('[AdminEvents] editEvent completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+                'sanitized_name' => $this->name,
+                'sanitized_location' => $this->location,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEvents] editEvent failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -51,27 +130,112 @@ new class extends Component {
      */
     public function saveEvent(): void
     {
-        $validated = $this->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'location' => ['required', 'string', 'max:255'],
-            'start_date' => ['required', 'date'],
-            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
-            'is_active' => ['boolean'],
-        ]);
+        try {
+            Log::info('[AdminEvents] saveEvent started', [
+                'user_id' => auth()->id(),
+                'is_editing' => $this->editingEvent !== null,
+                'event_id' => $this->editingEvent?->id,
+                'input_before_sanitization' => [
+                    'name' => $this->name,
+                    'location' => $this->location,
+                    'start_date' => $this->start_date,
+                    'end_date' => $this->end_date,
+                    'is_active' => $this->is_active,
+                ],
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        if ($this->editingEvent) {
-            $this->editingEvent->update($validated);
-            $event = $this->editingEvent;
-            session()->flash('event-updated', 'Event updated successfully!');
-        } else {
-            $event = Event::create($validated);
-            session()->flash('event-created', 'Event created successfully!');
+            // Sanitize inputs before validation
+            $this->name = $this->sanitizeInput($this->name) ?? '';
+            $this->location = $this->sanitizeInput($this->location) ?? '';
+
+            Log::debug('[AdminEvents] saveEvent - inputs sanitized', [
+                'user_id' => auth()->id(),
+                'sanitized_name' => $this->name,
+                'sanitized_location' => $this->location,
+            ]);
+
+            $validated = $this->validate([
+                'name' => ['required', 'string', 'max:255'],
+                'location' => ['required', 'string', 'max:255'],
+                'start_date' => ['required', 'date'],
+                'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+                'is_active' => ['boolean'],
+            ]);
+
+            Log::debug('[AdminEvents] saveEvent - validation passed', [
+                'user_id' => auth()->id(),
+                'validated_data' => $validated,
+            ]);
+
+            if ($this->editingEvent) {
+                $this->editingEvent->update($validated);
+                $event = $this->editingEvent;
+                session()->flash('event-updated', 'Event updated successfully!');
+                Log::info('[AdminEvents] saveEvent - event updated', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $event->id,
+                ]);
+            } else {
+                $event = Event::create($validated);
+                session()->flash('event-created', 'Event created successfully!');
+                Log::info('[AdminEvents] saveEvent - event created', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $event->id,
+                ]);
+            }
+
+            // Generate event dates
+            try {
+                $event->generateEventDates();
+                Log::debug('[AdminEvents] saveEvent - event dates generated', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $event->id,
+                ]);
+            } catch (\Exception $e) {
+                Log::error('[AdminEvents] saveEvent - failed to generate event dates', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $event->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                throw $e;
+            }
+
+            $this->resetForm();
+
+            Log::info('[AdminEvents] saveEvent completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[AdminEvents] saveEvent - validation failed', [
+                'user_id' => auth()->id(),
+                'errors' => $e->errors(),
+                'input' => [
+                    'name' => $this->name,
+                    'location' => $this->location,
+                    'start_date' => $this->start_date,
+                    'end_date' => $this->end_date,
+                ],
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('[AdminEvents] saveEvent failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'input' => [
+                    'name' => $this->name,
+                    'location' => $this->location,
+                    'start_date' => $this->start_date,
+                    'end_date' => $this->end_date,
+                ],
+            ]);
+            throw $e;
         }
-
-        // Generate event dates
-        $event->generateEventDates();
-
-        $this->resetForm();
     }
 
     /**
@@ -79,9 +243,34 @@ new class extends Component {
      */
     public function deleteEvent(Event $event): void
     {
-        $event->delete();
-        session()->flash('event-deleted', 'Event deleted successfully!');
-        $this->resetPage();
+        try {
+            Log::info('[AdminEvents] deleteEvent started', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+                'event_name' => $event->name,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $event->delete();
+
+            session()->flash('event-deleted', 'Event deleted successfully!');
+            $this->resetPage();
+
+            Log::info('[AdminEvents] deleteEvent completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEvents] deleteEvent failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -89,9 +278,33 @@ new class extends Component {
      */
     public function getEventsProperty()
     {
-        return Event::withCount(['ticketTypes', 'eventDates'])
-            ->orderBy('start_date', 'desc')
-            ->paginate(10);
+        try {
+            Log::debug('[AdminEvents] getEventsProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $events = Event::withCount(['ticketTypes', 'eventDates'])
+                ->orderBy('start_date', 'desc')
+                ->paginate(10);
+
+            Log::debug('[AdminEvents] getEventsProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'events_count' => $events->count(),
+                'total' => $events->total(),
+            ]);
+
+            return $events;
+        } catch (\Exception $e) {
+            Log::error('[AdminEvents] getEventsProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 }; ?>
 
