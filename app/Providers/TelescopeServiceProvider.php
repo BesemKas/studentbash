@@ -21,6 +21,20 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
         $isLocal = $this->app->environment('local');
 
         Telescope::filter(function (IncomingEntry $entry) use ($isLocal) {
+            // Always log Livewire requests for debugging
+            if ($entry->type === 'request') {
+                $content = $entry->content ?? [];
+                $uri = $content['uri'] ?? '';
+                $method = $content['method'] ?? '';
+                
+                // Log all Livewire requests
+                if (str_contains($uri, '/livewire/') || 
+                    str_contains($uri, 'livewire') ||
+                    isset($content['headers']['x-livewire'])) {
+                    return true;
+                }
+            }
+            
             return $isLocal ||
                    $entry->isReportableException() ||
                    $entry->isFailedRequest() ||

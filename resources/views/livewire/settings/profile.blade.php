@@ -47,6 +47,9 @@ new class extends Component {
 
         $user->save();
 
+        $this->name = $user->name;
+        $this->email = $user->email;
+
         $this->dispatch('profile-updated', name: $user->name);
     }
 
@@ -73,7 +76,7 @@ new class extends Component {
     @include('partials.settings-heading')
 
     <x-settings.layout :heading="__('Profile')" :subheading="__('Update your name and email address')">
-        <form class="my-6 w-full space-y-6">
+        <form method="POST" wire:submit="updateProfileInformation" class="my-6 w-full space-y-6">
             <flux:input wire:model="name" :label="__('Name')" type="text" required autofocus autocomplete="name" />
 
             <div>
@@ -100,7 +103,12 @@ new class extends Component {
 
             <div class="flex items-center gap-4">
                 <div class="flex items-center justify-end">
-                    <flux:button wire:click="updateProfileInformation" variant="primary" type="button" class="w-full" data-test="update-profile-button">
+                    <flux:button 
+                        variant="primary" 
+                        type="submit" 
+                        class="w-full" 
+                        data-test="update-profile-button"
+                    >
                         {{ __('Save') }}
                     </flux:button>
                 </div>
