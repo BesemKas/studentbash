@@ -138,6 +138,7 @@
 
     {{ $slot }}
 
+    @livewireScripts
     @fluxScripts
 </body>
 

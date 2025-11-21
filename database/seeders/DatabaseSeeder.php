@@ -18,6 +18,13 @@ class DatabaseSeeder extends Seeder
 
         // Seed events and ticket types
         //$this->call(EventSeeder::class);
+                // Create jano user
+                $jano = User::create([
+                    'name' => 'jano',
+                    'email' => 'jano@payaccsys.com',
+                    'password' => bcrypt('password'),
+                ]);
+                $jano->assignRole('admin');
 
         // Create admin user
         $admin = User::factory()->create([
@@ -34,12 +41,6 @@ class DatabaseSeeder extends Seeder
         ]);
         $user->assignRole('user');
 
-        // Create jano user
-        $jano = User::create([
-            'name' => 'jano',
-            'email' => 'jano@payaccsys.com',
-            'password' => bcrypt('password'),
-        ]);
-        $jano->assignRole('admin');
+
     }
 }
