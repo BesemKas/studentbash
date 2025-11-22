@@ -7,6 +7,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Facades\Log;
 
 class TicketVerifiedNotification extends Notification implements ShouldQueue
 {
@@ -18,7 +19,13 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
     public function __construct(
         public Ticket $ticket
     ) {
-        //
+        // Log when notification is queued
+        Log::info('[TicketVerifiedNotification] Notification queued', [
+            'ticket_id' => $this->ticket->id,
+            'queue_connection' => config('queue.default'),
+            'email' => $this->ticket->email,
+            'holder_name' => $this->ticket->holder_name,
+        ]);
     }
 
     /**
@@ -36,7 +43,15 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
      */
     public function toMail(object $notifiable): MailMessage
     {
-        return (new MailMessage)
+        // Log when notification is being processed (job is running)
+        Log::info('[TicketVerifiedNotification] Processing notification - generating email', [
+            'ticket_id' => $this->ticket->id,
+            'email' => $this->ticket->email,
+            'holder_name' => $this->ticket->holder_name,
+            'queue_connection' => config('queue.default'),
+        ]);
+
+        $mailMessage = (new MailMessage)
             ->subject('Your Ticket Has Been Verified - Student Bash')
             ->greeting('Hello ' . $this->ticket->holder_name . '!')
             ->line('Great news! Your payment has been verified and your ticket is now active.')
@@ -48,6 +63,14 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
             ->line('Your ticket is now ready to use at the event. Please keep your QR code safe and present it at the gate.')
             ->action('View My Tickets', url('/my-tickets'))
             ->line('Thank you for your purchase! We look forward to seeing you at the Student Bash.');
+
+        // Log when email message is successfully created
+        Log::info('[TicketVerifiedNotification] Email message created successfully', [
+            'ticket_id' => $this->ticket->id,
+            'email' => $this->ticket->email,
+        ]);
+
+        return $mailMessage;
     }
 
     /**

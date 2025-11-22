@@ -179,22 +179,33 @@ new class extends Component {
                 
                 if ($recipientEmail) {
                     try {
-                        Log::debug('[VerificationManager] toggleVerification - sending verification email', [
+                        $queueConnection = config('queue.default');
+                        $isSyncQueue = $queueConnection === 'sync';
+                        
+                        Log::info('[VerificationManager] toggleVerification - dispatching verification email notification', [
                             'user_id' => auth()->id(),
                             'ticket_id' => $ticket->id,
                             'email' => $recipientEmail,
                             'email_type' => $emailType,
                             'send_email_to_holder' => $ticket->send_email_to_holder,
+                            'queue_connection' => $queueConnection,
+                            'is_sync_queue' => $isSyncQueue,
+                            'note' => $isSyncQueue 
+                                ? 'Email will be sent immediately (sync queue)' 
+                                : 'Email notification queued - requires queue worker to process',
                         ]);
 
                         Notification::route('mail', $recipientEmail)
                             ->notify(new TicketVerifiedNotification($ticket));
 
-                        Log::info('[VerificationManager] toggleVerification - verification email sent', [
+                        Log::info('[VerificationManager] toggleVerification - verification email notification dispatched', [
                             'user_id' => auth()->id(),
                             'ticket_id' => $ticket->id,
                             'email' => $recipientEmail,
                             'email_type' => $emailType,
+                            'queue_connection' => $queueConnection,
+                            'is_sync_queue' => $isSyncQueue,
+                            'status' => $isSyncQueue ? 'sent_immediately' : 'queued',
                         ]);
                     } catch (\Exception $e) {
                         // Log error but don't fail the verification

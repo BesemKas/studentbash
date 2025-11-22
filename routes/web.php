@@ -51,6 +51,10 @@ Route::view('dashboard', 'dashboard')
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
+// Queue processor route for cPanel cron jobs (token-protected)
+Route::get('queue/process', [App\Http\Controllers\QueueProcessorController::class, 'process'])
+    ->name('queue.process');
+
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
