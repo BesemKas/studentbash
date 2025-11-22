@@ -3,26 +3,21 @@
 namespace App\Notifications;
 
 use App\Models\Ticket;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
 
-class TicketVerifiedNotification extends Notification implements ShouldQueue
+class TicketVerifiedNotification extends Notification
 {
-    use Queueable;
-
     /**
      * Create a new notification instance.
      */
     public function __construct(
         public Ticket $ticket
     ) {
-        // Log when notification is queued
-        Log::info('[TicketVerifiedNotification] Notification queued', [
+        // Log when notification is created
+        Log::info('[TicketVerifiedNotification] Notification created', [
             'ticket_id' => $this->ticket->id,
-            'queue_connection' => config('queue.default'),
             'email' => $this->ticket->email,
             'holder_name' => $this->ticket->holder_name,
         ]);
@@ -43,12 +38,11 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
      */
     public function toMail(object $notifiable): MailMessage
     {
-        // Log when notification is being processed (job is running)
+        // Log when notification is being processed
         Log::info('[TicketVerifiedNotification] Processing notification - generating email', [
             'ticket_id' => $this->ticket->id,
             'email' => $this->ticket->email,
             'holder_name' => $this->ticket->holder_name,
-            'queue_connection' => config('queue.default'),
             'mail_mailer' => config('mail.default'),
             'mail_host' => config('mail.mailers.smtp.host'),
             'mail_port' => config('mail.mailers.smtp.port'),
