@@ -179,7 +179,7 @@ new class extends Component {
                 
                 if ($recipientEmail) {
                     try {
-                        Log::info('[VerificationManager] toggleVerification - sending verification email notification', [
+                        Log::info('[VerificationManager] toggleVerification - queuing verification email notification', [
                             'user_id' => auth()->id(),
                             'ticket_id' => $ticket->id,
                             'email' => $recipientEmail,
@@ -188,9 +188,9 @@ new class extends Component {
                         ]);
 
                         Notification::route('mail', $recipientEmail)
-                            ->notifyNow(new TicketVerifiedNotification($ticket));
+                            ->notify(new TicketVerifiedNotification($ticket));
 
-                        Log::info('[VerificationManager] toggleVerification - verification email sent successfully', [
+                        Log::info('[VerificationManager] toggleVerification - verification email queued successfully', [
                             'user_id' => auth()->id(),
                             'ticket_id' => $ticket->id,
                             'email' => $recipientEmail,
@@ -221,7 +221,7 @@ new class extends Component {
             }
 
             Session::flash('verification-updated', $ticket->is_verified 
-                ? 'Ticket verified and email sent successfully!' 
+                ? 'Ticket verified and email queued for delivery!' 
                 : 'Verification status updated successfully!');
 
             Log::info('[VerificationManager] toggleVerification completed successfully', [

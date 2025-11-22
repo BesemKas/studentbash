@@ -3,20 +3,24 @@
 namespace App\Notifications;
 
 use App\Models\Ticket;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
 
-class TicketVerifiedNotification extends Notification
+class TicketVerifiedNotification extends Notification implements ShouldQueue
 {
+    use Queueable;
+
     /**
      * Create a new notification instance.
      */
     public function __construct(
         public Ticket $ticket
     ) {
-        // Log when notification is created
-        Log::info('[TicketVerifiedNotification] Notification created', [
+        // Log when notification is queued
+        Log::info('[TicketVerifiedNotification] Notification queued', [
             'ticket_id' => $this->ticket->id,
             'email' => $this->ticket->email,
             'holder_name' => $this->ticket->holder_name,
