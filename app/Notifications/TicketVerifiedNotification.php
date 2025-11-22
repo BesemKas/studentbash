@@ -49,6 +49,11 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
             'email' => $this->ticket->email,
             'holder_name' => $this->ticket->holder_name,
             'queue_connection' => config('queue.default'),
+            'mail_mailer' => config('mail.default'),
+            'mail_host' => config('mail.mailers.smtp.host'),
+            'mail_port' => config('mail.mailers.smtp.port'),
+            'mail_encryption' => config('mail.mailers.smtp.encryption'),
+            'mail_from' => config('mail.from.address'),
         ]);
 
         $mailMessage = (new MailMessage)

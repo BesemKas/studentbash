@@ -55,6 +55,49 @@ Route::view('dashboard', 'dashboard')
 Route::get('queue/process', [App\Http\Controllers\QueueProcessorController::class, 'process'])
     ->name('queue.process');
 
+// Mail test route (token-protected) - for debugging email issues
+Route::get('mail/test', function (\Illuminate\Http\Request $request) {
+    $token = env('QUEUE_PROCESSOR_TOKEN');
+    if (empty($token) || $request->query('token') !== $token) {
+        return response()->json(['error' => 'Invalid token'], 403);
+    }
+
+    $to = $request->query('to', config('mail.from.address'));
+    
+    try {
+        \Illuminate\Support\Facades\Mail::raw('This is a test email from StudentBash. If you receive this, your mail configuration is working correctly!', function ($message) use ($to) {
+            $message->to($to)
+                    ->subject('StudentBash Mail Test');
+        });
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Test email sent successfully',
+            'to' => $to,
+            'mail_config' => [
+                'mailer' => config('mail.default'),
+                'host' => config('mail.mailers.smtp.host'),
+                'port' => config('mail.mailers.smtp.port'),
+                'encryption' => config('mail.mailers.smtp.encryption'),
+                'from' => config('mail.from.address'),
+            ]
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+            'mail_config' => [
+                'mailer' => config('mail.default'),
+                'host' => config('mail.mailers.smtp.host'),
+                'port' => config('mail.mailers.smtp.port'),
+                'encryption' => config('mail.mailers.smtp.encryption'),
+                'from' => config('mail.from.address'),
+            ]
+        ], 500);
+    }
+})->name('mail.test');
+
 Route::middleware(['auth'])->group(function () {
     Route::redirect('settings', 'settings/profile');
 
