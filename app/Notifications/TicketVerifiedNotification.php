@@ -8,6 +8,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class TicketVerifiedNotification extends Notification implements ShouldQueue
 {
@@ -76,6 +77,27 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
         ]);
 
         return $mailMessage;
+    }
+
+    /**
+     * Handle a job failure.
+     *
+     * @param  \Throwable  $exception
+     * @return void
+     */
+    public function failed(Throwable $exception): void
+    {
+        Log::error('[TicketVerifiedNotification] Failed to send email notification', [
+            'ticket_id' => $this->ticket->id,
+            'email' => $this->ticket->email,
+            'holder_name' => $this->ticket->holder_name,
+            'error' => $exception->getMessage(),
+            'trace' => $exception->getTraceAsString(),
+            'file' => $exception->getFile(),
+            'line' => $exception->getLine(),
+            'mail_mailer' => config('mail.default'),
+            'mail_host' => config('mail.mailers.smtp.host'),
+        ]);
     }
 
     /**

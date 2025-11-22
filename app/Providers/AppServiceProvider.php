@@ -5,6 +5,9 @@ namespace App\Providers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Mail\Events\MessageSent;
+use Illuminate\Mail\Events\MessageSending;
+use Illuminate\Mail\Events\MessageFailed;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -33,6 +36,32 @@ class AppServiceProvider extends ServiceProvider
                     'route_methods' => $route->methods(),
                 ]);
             }
+        });
+
+        // Log mail sending events
+        $this->app['events']->listen(MessageSending::class, function (MessageSending $event) {
+            Log::info('[Mail] Message sending', [
+                'to' => array_keys($event->message->getTo()),
+                'subject' => $event->message->getSubject(),
+                'from' => array_keys($event->message->getFrom() ?? []),
+            ]);
+        });
+
+        $this->app['events']->listen(MessageSent::class, function (MessageSent $event) {
+            Log::info('[Mail] Message sent successfully', [
+                'to' => array_keys($event->message->getTo()),
+                'subject' => $event->message->getSubject(),
+                'from' => array_keys($event->message->getFrom() ?? []),
+            ]);
+        });
+
+        $this->app['events']->listen(MessageFailed::class, function (MessageFailed $event) {
+            Log::error('[Mail] Message failed to send', [
+                'to' => array_keys($event->message->getTo()),
+                'subject' => $event->message->getSubject(),
+                'error' => $event->exception->getMessage(),
+                'trace' => $event->exception->getTraceAsString(),
+            ]);
         });
     }
 }
