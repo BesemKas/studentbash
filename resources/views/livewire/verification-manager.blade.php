@@ -162,32 +162,60 @@ new class extends Component {
             }
 
             // Send email notification when ticket is verified
-            if ($wasUnverified && $ticket->is_verified && $ticket->email) {
-                try {
-                    Log::debug('[VerificationManager] toggleVerification - sending verification email', [
-                        'user_id' => auth()->id(),
-                        'ticket_id' => $ticket->id,
-                        'email' => $ticket->email,
-                    ]);
+            if ($wasUnverified && $ticket->is_verified) {
+                // Determine email recipient based on preference
+                $recipientEmail = null;
+                $emailType = null;
+                
+                if ($ticket->send_email_to_holder) {
+                    // Send to ticket holder's email
+                    $recipientEmail = $ticket->email;
+                    $emailType = 'holder';
+                } else {
+                    // Send to user who generated the ticket (default)
+                    $recipientEmail = $ticket->user?->email;
+                    $emailType = 'generator';
+                }
+                
+                if ($recipientEmail) {
+                    try {
+                        Log::debug('[VerificationManager] toggleVerification - sending verification email', [
+                            'user_id' => auth()->id(),
+                            'ticket_id' => $ticket->id,
+                            'email' => $recipientEmail,
+                            'email_type' => $emailType,
+                            'send_email_to_holder' => $ticket->send_email_to_holder,
+                        ]);
 
-                    Notification::route('mail', $ticket->email)
-                        ->notify(new TicketVerifiedNotification($ticket));
+                        Notification::route('mail', $recipientEmail)
+                            ->notify(new TicketVerifiedNotification($ticket));
 
-                    Log::info('[VerificationManager] toggleVerification - verification email sent', [
+                        Log::info('[VerificationManager] toggleVerification - verification email sent', [
+                            'user_id' => auth()->id(),
+                            'ticket_id' => $ticket->id,
+                            'email' => $recipientEmail,
+                            'email_type' => $emailType,
+                        ]);
+                    } catch (\Exception $e) {
+                        // Log error but don't fail the verification
+                        Log::error('[VerificationManager] toggleVerification - failed to send verification email', [
+                            'user_id' => auth()->id(),
+                            'ticket_id' => $ticket->id,
+                            'email' => $recipientEmail,
+                            'email_type' => $emailType,
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                            'file' => $e->getFile(),
+                            'line' => $e->getLine(),
+                        ]);
+                    }
+                } else {
+                    Log::warning('[VerificationManager] toggleVerification - no email address available', [
                         'user_id' => auth()->id(),
                         'ticket_id' => $ticket->id,
-                        'email' => $ticket->email,
-                    ]);
-                } catch (\Exception $e) {
-                    // Log error but don't fail the verification
-                    Log::error('[VerificationManager] toggleVerification - failed to send verification email', [
-                        'user_id' => auth()->id(),
-                        'ticket_id' => $ticket->id,
-                        'email' => $ticket->email,
-                        'error' => $e->getMessage(),
-                        'trace' => $e->getTraceAsString(),
-                        'file' => $e->getFile(),
-                        'line' => $e->getLine(),
+                        'send_email_to_holder' => $ticket->send_email_to_holder,
+                        'ticket_email' => $ticket->email,
+                        'user_email' => $ticket->user?->email,
                     ]);
                 }
             }

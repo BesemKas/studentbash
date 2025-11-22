@@ -21,6 +21,7 @@ new class extends Component {
     public string $paymentRef = '';
     public string $qrCodeText = '';
     public string $qrCodeSvg = '';
+    public bool $sendEmailToHolder = false;
 
     /**
      * Sanitize input to only allow letters, digits, and hyphens
@@ -528,6 +529,7 @@ new class extends Component {
                 'payment_ref' => $this->paymentRef,
                 'is_verified' => false,
                 'is_vip' => $ticketType->is_vip,
+                'send_email_to_holder' => $this->sendEmailToHolder,
             ]);
 
             Log::info('[TicketGenerator] saveTicket - ticket created', [
@@ -691,6 +693,11 @@ new class extends Component {
                     type="email"
                     required
                     placeholder="holder@example.com"
+                />
+
+                <flux:checkbox
+                    wire:model="sendEmailToHolder"
+                    label="Send verification email to ticket holder instead of me"
                 />
 
                 <flux:input

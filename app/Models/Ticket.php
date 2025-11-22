@@ -21,6 +21,7 @@ class Ticket extends Model
         'is_verified',
         'is_vip',
         'used_at',
+        'send_email_to_holder',
     ];
 
     protected $casts = [
@@ -28,6 +29,7 @@ class Ticket extends Model
         'is_vip' => 'boolean',
         'dob' => 'date',
         'used_at' => 'datetime',
+        'send_email_to_holder' => 'boolean',
     ];
 
     /**
