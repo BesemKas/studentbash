@@ -373,18 +373,21 @@ new class extends Component {
                 'qr_code_text_preview' => substr($this->qrCodeText, 0, 20) . '...',
             ]);
 
-            // Generate QR code SVG
+            // Generate QR code SVG with URL format
             try {
                 $renderer = new ImageRenderer(
                     new RendererStyle(400),
                     new SvgImageBackEnd()
                 );
                 $writer = new Writer($renderer);
-                $this->qrCodeSvg = $writer->writeString($this->qrCodeText);
+                // Encode URL with ticket parameter for scanning
+                $qrCodeUrl = route('gate') . '?ticket=' . $this->qrCodeText;
+                $this->qrCodeSvg = $writer->writeString($qrCodeUrl);
 
                 Log::debug('[TicketGenerator] generateQrCode - QR code SVG generated', [
                     'user_id' => auth()->id(),
                     'svg_length' => strlen($this->qrCodeSvg),
+                    'qr_code_url' => $qrCodeUrl,
                 ]);
             } catch (\Exception $e) {
                 $this->qrCodeSvg = '';

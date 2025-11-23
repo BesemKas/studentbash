@@ -340,7 +340,7 @@ new class extends Component {
                         <div class="grid gap-4 md:grid-cols-2">
                             <div class="flex justify-center items-center p-6 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
                                 <div class="w-full max-w-xs">
-                                    {!! $this->generateQrCodeSvg($ticket->qr_code_text) !!}
+                                    {!! $this->generateQrCodeSvg(route('gate') . '?ticket=' . $ticket->qr_code_text) !!}
                                 </div>
                             </div>
                             <div class="flex flex-col justify-center p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">

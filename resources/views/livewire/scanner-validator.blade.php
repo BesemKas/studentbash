@@ -13,6 +13,7 @@ new class extends Component {
     public string $statusMessage = '';
     public string $statusType = ''; // 'success', 'error', 'warning'
     public ?string $armbandInfo = null;
+    public ?int $selectedEventId = null;
 
     /**
      * Sanitize input to only allow letters, digits, and hyphens
@@ -147,40 +148,52 @@ new class extends Component {
                 return;
             }
 
-            // Get active event
-            $activeEvent = Event::where('is_active', true)->first();
-            if (!$activeEvent) {
-                $this->statusMessage = 'NO ACTIVE EVENT - Please contact administrator';
+            // Require event selection
+            if (!$this->selectedEventId) {
+                $this->statusMessage = 'Please select an event first';
                 $this->statusType = 'error';
-                Log::error('[ScannerValidator] checkIn - no active event', [
+                Log::warning('[ScannerValidator] checkIn - no event selected', [
                     'user_id' => auth()->id(),
                     'ticket_id' => $this->foundTicket->id,
                 ]);
                 return;
             }
 
-            Log::debug('[ScannerValidator] checkIn - active event found', [
+            // Get selected event
+            $selectedEvent = Event::find($this->selectedEventId);
+            if (!$selectedEvent) {
+                $this->statusMessage = 'SELECTED EVENT NOT FOUND - Please select a valid event';
+                $this->statusType = 'error';
+                Log::error('[ScannerValidator] checkIn - selected event not found', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'selected_event_id' => $this->selectedEventId,
+                ]);
+                return;
+            }
+
+            Log::debug('[ScannerValidator] checkIn - selected event found', [
                 'user_id' => auth()->id(),
                 'ticket_id' => $this->foundTicket->id,
-                'active_event_id' => $activeEvent->id,
+                'selected_event_id' => $selectedEvent->id,
             ]);
 
-            // Validate ticket belongs to active event
-            if ($this->foundTicket->event_id !== $activeEvent->id) {
-                $this->statusMessage = 'DENIED - TICKET NOT VALID FOR CURRENT EVENT';
+            // Validate ticket belongs to selected event
+            if ($this->foundTicket->event_id !== $selectedEvent->id) {
+                $this->statusMessage = 'DENIED - TICKET NOT VALID FOR SELECTED EVENT';
                 $this->statusType = 'error';
-                Log::warning('[ScannerValidator] checkIn - ticket not valid for current event', [
+                Log::warning('[ScannerValidator] checkIn - ticket not valid for selected event', [
                     'user_id' => auth()->id(),
                     'ticket_id' => $this->foundTicket->id,
                     'ticket_event_id' => $this->foundTicket->event_id,
-                    'active_event_id' => $activeEvent->id,
+                    'selected_event_id' => $selectedEvent->id,
                 ]);
                 return;
             }
 
-            // Get current date and find matching EventDate
+            // Get current date and find matching EventDate for selected event
             $currentDate = now()->format('Y-m-d');
-            $eventDate = $activeEvent->eventDates()
+            $eventDate = $selectedEvent->eventDates()
                 ->where('date', $currentDate)
                 ->first();
 
@@ -191,7 +204,7 @@ new class extends Component {
                     'user_id' => auth()->id(),
                     'ticket_id' => $this->foundTicket->id,
                     'current_date' => $currentDate,
-                    'active_event_id' => $activeEvent->id,
+                    'selected_event_id' => $selectedEvent->id,
                 ]);
                 return;
             }
@@ -275,12 +288,93 @@ new class extends Component {
             ]);
 
             $this->reset(['searchId', 'foundTicket', 'statusMessage', 'statusType', 'armbandInfo']);
+            // Note: selectedEventId is NOT reset - it persists across searches
 
             Log::debug('[ScannerValidator] resetSearch completed successfully', [
                 'user_id' => auth()->id(),
             ]);
         } catch (\Exception $e) {
             Log::error('[ScannerValidator] resetSearch failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Mount the component
+     */
+    public function mount(): void
+    {
+        try {
+            Log::debug('[ScannerValidator] mount started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Check for ticket parameter in URL
+            $ticketParam = request()->query('ticket');
+            if ($ticketParam) {
+                $this->searchId = $ticketParam;
+                Log::debug('[ScannerValidator] mount - ticket parameter found', [
+                    'user_id' => auth()->id(),
+                    'ticket_param' => $ticketParam,
+                ]);
+                // Optionally auto-search, but let's let admin control it
+            }
+
+            Log::debug('[ScannerValidator] mount completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] mount failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
+    }
+
+    /**
+     * Get available events for selection
+     * Returns events that are:
+     * - Active (is_active = true)
+     * - Have at least one ticket
+     * - Have an EventDate matching today's date
+     */
+    public function getAvailableEventsProperty()
+    {
+        try {
+            Log::debug('[ScannerValidator] getAvailableEventsProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $currentDate = now()->format('Y-m-d');
+
+            $events = Event::where('is_active', true)
+                ->whereHas('tickets') // Has at least one ticket
+                ->whereHas('eventDates', function ($query) use ($currentDate) {
+                    $query->where('date', $currentDate);
+                })
+                ->orderBy('name')
+                ->get();
+
+            Log::debug('[ScannerValidator] getAvailableEventsProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'events_count' => $events->count(),
+            ]);
+
+            return $events;
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] getAvailableEventsProperty failed', [
                 'user_id' => auth()->id(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
@@ -375,15 +469,45 @@ new class extends Component {
         <!-- Current Date Display -->
         <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
             <flux:text class="font-semibold">Current Date: {{ date('F j, Y') }}</flux:text>
-            @if ($this->activeEvent)
-                <flux:text class="text-sm text-neutral-500 mt-1">
-                    Active Event: {{ $this->activeEvent->name }}
-                    @if ($this->currentEventDate)
-                        - Day {{ $this->currentEventDate->day_number }}
-                    @endif
-                </flux:text>
+            @if ($this->selectedEventId)
+                @php
+                    $selectedEvent = \App\Models\Event::find($this->selectedEventId);
+                @endphp
+                @if ($selectedEvent)
+                    <flux:text class="text-sm text-neutral-500 mt-1">
+                        Selected Event: {{ $selectedEvent->name }}
+                        @if ($selectedEvent->location)
+                            - {{ $selectedEvent->location }}
+                        @endif
+                    </flux:text>
+                @endif
             @else
-                <flux:text class="text-sm text-red-500 mt-1">No active event</flux:text>
+                <flux:text class="text-sm text-yellow-600 dark:text-yellow-400 mt-1">Please select an event below</flux:text>
+            @endif
+        </div>
+
+        <!-- Event Selection -->
+        <div class="space-y-2">
+            <flux:select
+                wire:model="selectedEventId"
+                label="Select Event"
+                placeholder="Choose an event to validate tickets for"
+                required
+            >
+                <option value="">Select an event...</option>
+                @foreach ($this->availableEvents as $event)
+                    <option value="{{ $event->id }}">
+                        {{ $event->name }}
+                        @if ($event->location)
+                            - {{ $event->location }}
+                        @endif
+                    </option>
+                @endforeach
+            </flux:select>
+            @if ($this->availableEvents->count() === 0)
+                <flux:text class="text-sm text-yellow-600 dark:text-yellow-400">
+                    No active events with tickets available for today.
+                </flux:text>
             @endif
         </div>
 
@@ -408,6 +532,18 @@ new class extends Component {
                     Search Ticket
                 </flux:button>
 
+                <flux:button
+                    type="button"
+                    variant="outline"
+                    onclick="openQrScanner()"
+                    class="flex-shrink-0"
+                >
+                    <svg class="w-5 h-5 inline-block mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                    </svg>
+                    Scan QR
+                </flux:button>
+
                 @if ($foundTicket || !empty($statusMessage))
                     <flux:button
                         wire:click="resetSearch"
@@ -416,6 +552,35 @@ new class extends Component {
                         Clear
                     </flux:button>
                 @endif
+            </div>
+        </div>
+
+        <!-- QR Scanner Modal -->
+        <div id="qrScannerModal" class="hidden fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+            <div class="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                <div class="fixed inset-0 bg-neutral-500 bg-opacity-75 transition-opacity" aria-hidden="true" onclick="closeQrScanner()"></div>
+                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+                <div class="inline-block align-bottom bg-white dark:bg-neutral-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg w-full">
+                    <div class="bg-white dark:bg-neutral-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                        <div class="flex items-center justify-between mb-4">
+                            <h3 class="text-lg leading-6 font-medium text-neutral-900 dark:text-neutral-100" id="modal-title">
+                                Scan QR Code
+                            </h3>
+                            <button type="button" onclick="closeQrScanner()" class="text-neutral-400 hover:text-neutral-500">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        <div id="qr-reader" class="w-full"></div>
+                        <div id="qr-reader-results" class="mt-4 text-sm text-neutral-600 dark:text-neutral-400"></div>
+                    </div>
+                    <div class="bg-neutral-50 dark:bg-neutral-900 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                        <button type="button" onclick="closeQrScanner()" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-neutral-600 text-base font-medium text-white hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-neutral-500 sm:ml-3 sm:w-auto sm:text-sm">
+                            Close
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -445,6 +610,11 @@ new class extends Component {
                     <div>
                         <flux:text class="text-sm text-neutral-500">Event</flux:text>
                         <flux:text class="font-semibold">{{ $foundTicket->event ? $foundTicket->event->name : 'Unknown' }}</flux:text>
+                    </div>
+
+                    <div>
+                        <flux:text class="text-sm text-neutral-500">Email</flux:text>
+                        <flux:text class="font-semibold">{{ $foundTicket->email ?: 'Not provided' }}</flux:text>
                     </div>
 
                     <div>
@@ -524,10 +694,15 @@ new class extends Component {
                         wire:click="checkIn"
                         variant="primary"
                         class="w-full"
-                        :disabled="!$foundTicket->is_verified || $foundTicket->isUsed()"
+                        :disabled="!$foundTicket->is_verified || $foundTicket->isUsed() || !$selectedEventId"
                     >
                         Check In
                     </flux:button>
+                    @if (!$selectedEventId)
+                        <flux:text class="text-xs text-yellow-600 dark:text-yellow-400 mt-2 block text-center">
+                            Please select an event above to check in this ticket
+                        </flux:text>
+                    @endif
                 </div>
             </div>
         @endif
@@ -565,4 +740,121 @@ new class extends Component {
         @endif
     </div>
 </section>
+
+<!-- html5-qrcode Library -->
+<script src="https://unpkg.com/html5-qrcode@latest/html5-qrcode.min.js"></script>
+
+<script>
+    let html5QrcodeScanner = null;
+    let isScanning = false;
+
+    function openQrScanner() {
+        const modal = document.getElementById('qrScannerModal');
+        modal.classList.remove('hidden');
+        
+        // Initialize scanner when modal opens
+        if (!html5QrcodeScanner) {
+            html5QrcodeScanner = new Html5Qrcode("qr-reader");
+        }
+        
+        // Start scanning
+        if (!isScanning) {
+            html5QrcodeScanner.start(
+                { facingMode: "environment" }, // Use back camera on mobile
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 }
+                },
+                onScanSuccess,
+                onScanError
+            ).then(() => {
+                isScanning = true;
+            }).catch((err) => {
+                console.error("Unable to start scanning", err);
+                document.getElementById('qr-reader-results').innerHTML = 
+                    '<div class="text-red-600">Error: Could not access camera. Please check permissions.</div>';
+            });
+        }
+    }
+
+    function closeQrScanner() {
+        if (html5QrcodeScanner && isScanning) {
+            html5QrcodeScanner.stop().then(() => {
+                isScanning = false;
+            }).catch((err) => {
+                console.error("Error stopping scanner", err);
+            });
+        }
+        
+        const modal = document.getElementById('qrScannerModal');
+        modal.classList.add('hidden');
+        
+        // Clear results
+        document.getElementById('qr-reader-results').innerHTML = '';
+    }
+
+    function onScanSuccess(decodedText, decodedResult) {
+        // Extract ticket code from URL
+        // Expected format: /gate?ticket=TICKET_CODE or full URL with ?ticket=TICKET_CODE
+        let ticketCode = null;
+        
+        // First, try to extract from query string pattern (works for both relative and absolute URLs)
+        const match = decodedText.match(/[?&]ticket=([^&]+)/);
+        if (match) {
+            ticketCode = decodeURIComponent(match[1]).trim();
+        } else {
+            // If no URL pattern found, try parsing as full URL
+            try {
+                const url = new URL(decodedText);
+                ticketCode = url.searchParams.get('ticket');
+                if (ticketCode) {
+                    ticketCode = decodeURIComponent(ticketCode).trim();
+                }
+            } catch (e) {
+                // If it's not a full URL and no pattern found, assume the whole text is the ticket code
+                ticketCode = decodedText.trim();
+            }
+        }
+        
+        if (ticketCode) {
+            // Stop scanning
+            if (html5QrcodeScanner && isScanning) {
+                html5QrcodeScanner.stop().then(() => {
+                    isScanning = false;
+                }).catch((err) => {
+                    console.error("Error stopping scanner", err);
+                });
+            }
+            
+            // Close modal
+            closeQrScanner();
+            
+            // Set the search ID and trigger search
+            @this.set('searchId', ticketCode);
+            @this.call('searchTicket');
+            
+            // Show success message
+            document.getElementById('qr-reader-results').innerHTML = 
+                '<div class="text-green-600">Ticket code found: ' + ticketCode + '</div>';
+        } else {
+            document.getElementById('qr-reader-results').innerHTML = 
+                '<div class="text-yellow-600">Could not extract ticket code from QR code. Please try again.</div>';
+        }
+    }
+
+    function onScanError(errorMessage) {
+        // Ignore scanning errors (they happen frequently during scanning)
+        // Only show errors if scanning has stopped
+        if (!isScanning) {
+            console.error("QR scan error:", errorMessage);
+        }
+    }
+
+    // Clean up on page unload
+    window.addEventListener('beforeunload', () => {
+        if (html5QrcodeScanner && isScanning) {
+            html5QrcodeScanner.stop().catch(() => {});
+        }
+    });
+</script>
 
