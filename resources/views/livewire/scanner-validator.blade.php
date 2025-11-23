@@ -65,7 +65,7 @@ new class extends Component {
                 'sanitized_search' => $sanitizedSearch,
             ]);
 
-            $this->foundTicket = Ticket::with(['event', 'ticketType'])
+            $this->foundTicket = Ticket::with(['event', 'ticketType', 'ticketType.event'])
                 ->where('qr_code_text', $sanitizedSearch)
                 ->first();
 
@@ -82,6 +82,10 @@ new class extends Component {
                     'ticket_id' => $this->foundTicket->id,
                     'payment_ref' => $this->foundTicket->payment_ref,
                     'is_verified' => $this->foundTicket->is_verified,
+                    'event_id' => $this->foundTicket->event_id,
+                    'event_name' => $this->foundTicket->event?->name ?? 'NULL',
+                    'ticket_type_id' => $this->foundTicket->event_ticket_type_id,
+                    'ticket_type_name' => $this->foundTicket->ticketType?->name ?? 'NULL',
                 ]);
             }
 
@@ -120,6 +124,22 @@ new class extends Component {
                 $this->statusType = 'error';
                 Log::warning('[ScannerValidator] checkIn - no ticket selected', [
                     'user_id' => auth()->id(),
+                ]);
+                return;
+            }
+
+            // Ensure ticket has an event_id
+            if (!$this->foundTicket->event_id) {
+                $this->statusMessage = 'INVALID TICKET - No event associated with this ticket';
+                $this->statusType = 'error';
+                Log::error('[ScannerValidator] checkIn - ticket has no event_id', [
+                    'user_id' => auth()->id(),
+                    'ticket_id' => $this->foundTicket->id,
+                    'ticket_data' => [
+                        'event_id' => $this->foundTicket->event_id,
+                        'event_ticket_type_id' => $this->foundTicket->event_ticket_type_id,
+                        'qr_code_text' => $this->foundTicket->qr_code_text,
+                    ],
                 ]);
                 return;
             }
@@ -172,21 +192,36 @@ new class extends Component {
                 return;
             }
 
+            // Refresh ticket from database to ensure we have latest data with relationships
+            $this->foundTicket->refresh();
+            $this->foundTicket->load(['event', 'ticketType']);
+
             Log::debug('[ScannerValidator] checkIn - selected event found', [
                 'user_id' => auth()->id(),
                 'ticket_id' => $this->foundTicket->id,
                 'selected_event_id' => $selectedEvent->id,
+                'ticket_event_id' => $this->foundTicket->event_id,
+                'ticket_event_id_type' => gettype($this->foundTicket->event_id),
+                'selected_event_id_type' => gettype($selectedEvent->id),
             ]);
 
             // Validate ticket belongs to selected event
-            if ($this->foundTicket->event_id !== $selectedEvent->id) {
+            // Cast both to int to ensure type-safe comparison
+            $ticketEventId = (int) $this->foundTicket->event_id;
+            $selectedEventIdInt = (int) $selectedEvent->id;
+            
+            if ($ticketEventId !== $selectedEventIdInt) {
                 $this->statusMessage = 'DENIED - TICKET NOT VALID FOR SELECTED EVENT';
                 $this->statusType = 'error';
                 Log::warning('[ScannerValidator] checkIn - ticket not valid for selected event', [
                     'user_id' => auth()->id(),
                     'ticket_id' => $this->foundTicket->id,
                     'ticket_event_id' => $this->foundTicket->event_id,
+                    'ticket_event_id_int' => $ticketEventId,
                     'selected_event_id' => $selectedEvent->id,
+                    'selected_event_id_int' => $selectedEventIdInt,
+                    'ticket_event_name' => $this->foundTicket->event?->name ?? 'NULL',
+                    'selected_event_name' => $selectedEvent->name,
                 ]);
                 return;
             }
