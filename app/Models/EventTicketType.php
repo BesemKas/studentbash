@@ -82,22 +82,25 @@ class EventTicketType extends Model
      */
     public function getArmbandColor(): string
     {
+        // VIP tickets always return 'VIP'
         if ($this->is_vip) {
             return 'VIP';
         }
 
-        if ($this->isFullPass()) {
-            return $this->armband_color ?? 'Full Pass';
+        // If armband_color is manually set, use it (for both full pass and day pass)
+        if (!empty($this->armband_color)) {
+            return $this->armband_color;
         }
 
-        // For day passes, get the color from the first allowed date
+        // For day passes without manual color, fall back to event date color
         if (!empty($this->allowed_dates)) {
             $firstDateId = $this->allowed_dates[0];
             $eventDate = $this->event->eventDates()->find($firstDateId);
             return $eventDate ? $eventDate->armband_color : 'Day Pass';
         }
 
-        return 'Day Pass';
+        // For full pass without manual color
+        return 'Full Pass';
     }
 
     /**

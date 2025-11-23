@@ -103,11 +103,17 @@ new class extends Component {
             ]);
 
             $this->resetForm();
+            
+            // Pre-populate with random color
+            $colors = ['pink', 'purple', 'red', 'blue', 'green', 'yellow', 'orange', 'teal', 'indigo', 'violet'];
+            $this->armband_color = $colors[array_rand($colors)];
+            
             $this->showForm = true;
 
             Log::info('[AdminEventTicketTypes] createTicketType completed successfully', [
                 'user_id' => auth()->id(),
                 'event_id' => $this->event->id,
+                'pre_populated_color' => $this->armband_color,
             ]);
         } catch (\Exception $e) {
             Log::error('[AdminEventTicketTypes] createTicketType failed', [
@@ -140,7 +146,8 @@ new class extends Component {
             $this->name = $this->sanitizeInput($ticketType->name) ?? $ticketType->name;
             $this->description = $ticketType->description ?? '';
             $this->is_vip = $ticketType->is_vip;
-            $this->allowed_dates = $ticketType->allowed_dates ?? [];
+            // VIP tickets should have empty allowed_dates (full pass)
+            $this->allowed_dates = $ticketType->is_vip ? [] : ($ticketType->allowed_dates ?? []);
             $this->armband_color = $ticketType->armband_color;
             $this->price = $ticketType->price;
             $this->showForm = true;
@@ -161,6 +168,45 @@ new class extends Component {
                 'line' => $e->getLine(),
             ]);
             throw $e;
+        }
+    }
+
+    /**
+     * Handle VIP checkbox change - automatically clear allowed_dates
+     */
+    public function updatedIsVip($value): void
+    {
+        try {
+            Log::debug('[AdminEventTicketTypes] updatedIsVip started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'is_vip' => $value,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // If VIP is checked, clear allowed_dates (VIP tickets are always full pass)
+            if ($value) {
+                $this->allowed_dates = [];
+                Log::debug('[AdminEventTicketTypes] updatedIsVip - VIP checked, cleared allowed_dates', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                ]);
+            }
+
+            Log::debug('[AdminEventTicketTypes] updatedIsVip completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] updatedIsVip failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            // Don't throw - this is a UI update method
         }
     }
 
@@ -211,8 +257,15 @@ new class extends Component {
                 'validated_data' => $validated,
             ]);
 
-            // If allowed_dates is empty, set to null (full pass)
-            if (empty($validated['allowed_dates'])) {
+            // VIP tickets are automatically full pass (clear allowed_dates)
+            if ($validated['is_vip']) {
+                $validated['allowed_dates'] = null;
+                Log::debug('[AdminEventTicketTypes] saveTicketType - VIP ticket, cleared allowed_dates', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                ]);
+            } elseif (empty($validated['allowed_dates'])) {
+                // If allowed_dates is empty and not VIP, set to null (full pass)
                 $validated['allowed_dates'] = null;
             }
 
@@ -478,24 +531,37 @@ new class extends Component {
                 />
 
                 <flux:checkbox
-                    wire:model="is_vip"
+                    wire:model.live="is_vip"
                     label="VIP Ticket"
-                    description="Mark this as a VIP ticket type"
+                    description="VIP tickets are automatically full pass (valid for all event dates)"
                 />
+
+                @if ($is_vip)
+                    <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                        <flux:text class="text-sm text-blue-800 dark:text-blue-300">
+                            <strong>Note:</strong> VIP tickets are automatically set as full pass and will be valid for all event dates. Date selection is disabled for VIP tickets.
+                        </flux:text>
+                    </div>
+                @endif
 
                 <div>
                     <flux:label>Valid Dates</flux:label>
                     <flux:text class="text-sm text-neutral-500 mb-2">
-                        Select which event dates this ticket type is valid for. Leave empty for full pass (all dates).
+                        @if ($is_vip)
+                            VIP tickets are automatically full pass (all dates). Select dates for day passes only.
+                        @else
+                            Select which event dates this ticket type is valid for. Leave empty for full pass (all dates).
+                        @endif
                     </flux:text>
-                    <div class="space-y-2 max-h-48 overflow-y-auto border border-neutral-200 dark:border-neutral-700 rounded-lg p-4">
+                    <div class="space-y-2 max-h-48 overflow-y-auto border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 {{ $is_vip ? 'opacity-50 pointer-events-none' : '' }}">
                         @foreach ($this->eventDates as $eventDate)
-                            <label class="flex items-center space-x-2 cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900 p-2 rounded">
+                            <label class="flex items-center space-x-2 {{ $is_vip ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900' }} p-2 rounded">
                                 <input
                                     type="checkbox"
                                     wire:model="allowed_dates"
                                     value="{{ $eventDate->id }}"
                                     class="rounded border-neutral-300 text-primary focus:ring-primary"
+                                    @if($is_vip) disabled @endif
                                 />
                                 <span class="text-sm">
                                     Day {{ $eventDate->day_number }} ({{ $eventDate->date->format('M j, Y') }}) - 
@@ -510,9 +576,9 @@ new class extends Component {
 
                 <flux:input
                     wire:model="armband_color"
-                    label="Armband Color (for full passes)"
-                    placeholder="e.g., blue, gold, silver"
-                    description="Leave empty for day passes (they use the day's color)"
+                    label="Armband Color"
+                    placeholder="e.g., blue, gold, silver, pink, purple, red, green, yellow, orange, teal, indigo, violet"
+                    description="Manually set the armband color for this ticket type. Works for all ticket types (full pass, day pass, VIP). If left empty, day passes will use the event date's color as a fallback."
                 />
 
                 <flux:input
