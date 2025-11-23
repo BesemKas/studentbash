@@ -3,7 +3,9 @@
 use App\Models\User;
 use Livewire\Volt\Volt;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
 
 test('profile page is displayed', function () {
     $this->actingAs($user = User::factory()->create());
@@ -14,14 +16,15 @@ test('profile page is displayed', function () {
 test('profile information can be updated', function () {
     $user = User::factory()->create();
 
-    $this->actingAs($user);
+    $response = $this->actingAs($user)
+        ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class)
+        ->put(route('profile.update'), [
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+        ]);
 
-    $response = Volt::test('settings.profile')
-        ->set('name', 'Test User')
-        ->set('email', 'test@example.com')
-        ->call('updateProfileInformation');
-
-    $response->assertHasNoErrors();
+    $response->assertSessionHasNoErrors()
+        ->assertRedirect(route('profile.edit'));
 
     $user->refresh();
 
@@ -33,14 +36,15 @@ test('profile information can be updated', function () {
 test('email verification status is unchanged when email address is unchanged', function () {
     $user = User::factory()->create();
 
-    $this->actingAs($user);
+    $response = $this->actingAs($user)
+        ->withoutMiddleware(\Illuminate\Foundation\Http\Middleware\ValidateCsrfToken::class)
+        ->put(route('profile.update'), [
+            'name' => 'Test User',
+            'email' => $user->email,
+        ]);
 
-    $response = Volt::test('settings.profile')
-        ->set('name', 'Test User')
-        ->set('email', $user->email)
-        ->call('updateProfileInformation');
-
-    $response->assertHasNoErrors();
+    $response->assertSessionHasNoErrors()
+        ->assertRedirect(route('profile.edit'));
 
     expect($user->refresh()->email_verified_at)->not->toBeNull();
 });

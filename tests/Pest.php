@@ -41,7 +41,4 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
-{
-    // ..
-}
+// Add custom test helpers here if needed

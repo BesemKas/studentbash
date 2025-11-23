@@ -4,7 +4,9 @@ use App\Models\User;
 use Laravel\Fortify\Features;
 use Livewire\Volt\Volt;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+uses(RefreshDatabase::class);
 
 beforeEach(function () {
     if (! Features::canManageTwoFactorAuthentication()) {
