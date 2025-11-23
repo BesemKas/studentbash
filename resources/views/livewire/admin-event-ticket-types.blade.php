@@ -136,12 +136,12 @@ new class extends Component {
             ]);
 
             $this->editingTicketType = $ticketType;
-            // Sanitize name, description, and armband_color when loading
+            // Load ticket type data - sanitize only name, not description or armband_color
             $this->name = $this->sanitizeInput($ticketType->name) ?? $ticketType->name;
-            $this->description = $this->sanitizeInput($ticketType->description) ?? ($ticketType->description ?? '');
+            $this->description = $ticketType->description ?? '';
             $this->is_vip = $ticketType->is_vip;
             $this->allowed_dates = $ticketType->allowed_dates ?? [];
-            $this->armband_color = $this->sanitizeInput($ticketType->armband_color) ?? $ticketType->armband_color;
+            $this->armband_color = $ticketType->armband_color;
             $this->price = $ticketType->price;
             $this->showForm = true;
 
@@ -149,9 +149,6 @@ new class extends Component {
                 'user_id' => auth()->id(),
                 'event_id' => $this->event->id,
                 'ticket_type_id' => $ticketType->id,
-                'sanitized_name' => $this->name,
-                'sanitized_description' => $this->description,
-                'sanitized_armband_color' => $this->armband_color,
             ]);
         } catch (\Exception $e) {
             Log::error('[AdminEventTicketTypes] editTicketType failed', [
@@ -178,7 +175,7 @@ new class extends Component {
                 'event_id' => $this->event->id,
                 'is_editing' => $this->editingTicketType !== null,
                 'ticket_type_id' => $this->editingTicketType?->id,
-                'input_before_sanitization' => [
+                'input' => [
                     'name' => $this->name,
                     'description' => $this->description,
                     'is_vip' => $this->is_vip,
@@ -189,17 +186,13 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
-            // Sanitize inputs before validation
+            // Sanitize only name, not description or armband_color
             $this->name = $this->sanitizeInput($this->name) ?? '';
-            $this->description = $this->sanitizeInput($this->description) ?? '';
-            $this->armband_color = $this->sanitizeInput($this->armband_color);
 
-            Log::debug('[AdminEventTicketTypes] saveTicketType - inputs sanitized', [
+            Log::debug('[AdminEventTicketTypes] saveTicketType - name sanitized', [
                 'user_id' => auth()->id(),
                 'event_id' => $this->event->id,
                 'sanitized_name' => $this->name,
-                'sanitized_description' => $this->description,
-                'sanitized_armband_color' => $this->armband_color,
             ]);
 
             $validated = $this->validate([

@@ -671,20 +671,75 @@ new class extends Component {
                     </flux:select>
 
                     @if ($this->selectedTicketType)
-                        <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                            <flux:text class="text-sm font-semibold mb-2">Ticket Type Details:</flux:text>
-                            @if ($this->selectedTicketType->description)
-                                <flux:text class="text-sm text-neutral-600 dark:text-neutral-400">{{ $this->selectedTicketType->description }}</flux:text>
-                            @endif
-                            <div class="mt-2 text-sm">
-                                <flux:text class="text-neutral-600 dark:text-neutral-400">
-                                    Valid for: 
-                                    @if ($this->selectedTicketType->isFullPass())
-                                        All event dates
-                                    @else
-                                        {{ $this->selectedTicketType->getValidDates()->count() }} day(s)
+                        <div class="p-6 bg-gradient-to-br from-cyan-50 to-purple-50 dark:from-cyan-900/20 dark:to-purple-900/20 rounded-lg border-2 border-cyan-200 dark:border-cyan-700">
+                            <flux:heading size="lg" class="mb-4">Ticket Details</flux:heading>
+                            
+                            <div class="space-y-4">
+                                @if ($this->selectedTicketType->description)
+                                    <div>
+                                        <flux:text class="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Description:</flux:text>
+                                        <flux:text class="text-sm text-neutral-600 dark:text-neutral-400">{{ $this->selectedTicketType->description }}</flux:text>
+                                    </div>
+                                @endif
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <flux:text class="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Price:</flux:text>
+                                        <flux:text class="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
+                                            @if ($this->selectedTicketType->price)
+                                                R{{ number_format($this->selectedTicketType->price, 2) }}
+                                            @else
+                                                Free
+                                            @endif
+                                        </flux:text>
+                                    </div>
+
+                                    <div>
+                                        <flux:text class="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Armband Color:</flux:text>
+                                        <div class="flex items-center gap-2">
+                                            <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200 border-2 border-cyan-300 dark:border-cyan-700">
+                                                {{ $this->selectedTicketType->getArmbandColor() }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <flux:text class="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Ticket Type:</flux:text>
+                                        <flux:text class="text-sm text-neutral-600 dark:text-neutral-400">
+                                            @if ($this->selectedTicketType->isFullPass())
+                                                <span class="font-semibold text-blue-600 dark:text-blue-400">Full Pass</span> - All event dates
+                                            @else
+                                                <span class="font-semibold text-green-600 dark:text-green-400">Day Pass</span> - {{ $this->selectedTicketType->getValidDates()->count() }} day(s)
+                                            @endif
+                                        </flux:text>
+                                    </div>
+
+                                    @if ($this->selectedTicketType->is_vip)
+                                        <div>
+                                            <flux:text class="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Status:</flux:text>
+                                            <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                                                VIP Ticket
+                                            </span>
+                                        </div>
                                     @endif
-                                </flux:text>
+                                </div>
+
+                                @if (!$this->selectedTicketType->isFullPass() && $this->selectedTicketType->getValidDates()->count() > 0)
+                                    <div>
+                                        <flux:text class="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">Valid Dates:</flux:text>
+                                        <div class="space-y-1">
+                                            @foreach ($this->selectedTicketType->getValidDates() as $date)
+                                                <div class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+                                                    <span>Day {{ $date->day_number }}:</span>
+                                                    <span class="font-medium">{{ $date->date->format('M j, Y') }}</span>
+                                                    <span class="text-xs">({{ ucfirst($date->armband_color) }} armband)</span>
+                                                </div>
+                                            @endforeach
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     @endif

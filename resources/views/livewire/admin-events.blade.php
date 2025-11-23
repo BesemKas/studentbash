@@ -103,9 +103,9 @@ new class extends Component {
             ]);
 
             $this->editingEvent = $event;
-            // Sanitize name and location when loading
-            $this->name = $this->sanitizeInput($event->name) ?? $event->name;
-            $this->location = $this->sanitizeInput($event->location) ?? $event->location;
+            // Load event data without sanitization
+            $this->name = $event->name;
+            $this->location = $event->location;
             $this->start_date = $event->start_date->format('Y-m-d');
             $this->end_date = $event->end_date->format('Y-m-d');
             $this->is_active = $event->is_active;
@@ -116,8 +116,6 @@ new class extends Component {
             Log::info('[AdminEvents] editEvent completed successfully', [
                 'user_id' => auth()->id(),
                 'event_id' => $event->id,
-                'sanitized_name' => $this->name,
-                'sanitized_location' => $this->location,
             ]);
         } catch (\Exception $e) {
             Log::error('[AdminEvents] editEvent failed', [
@@ -142,7 +140,7 @@ new class extends Component {
                 'user_id' => auth()->id(),
                 'is_editing' => $this->editingEvent !== null,
                 'event_id' => $this->editingEvent?->id,
-                'input_before_sanitization' => [
+                'input' => [
                     'name' => $this->name,
                     'location' => $this->location,
                     'start_date' => $this->start_date,
@@ -152,19 +150,13 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
-            // Sanitize inputs before validation
-            $this->name = $this->sanitizeInput($this->name) ?? '';
-            $this->location = $this->sanitizeInput($this->location) ?? '';
-
-            Log::debug('[AdminEvents] saveEvent - inputs sanitized', [
+            Log::debug('[AdminEvents] saveEvent - validating inputs', [
                 'user_id' => auth()->id(),
-                'sanitized_name' => $this->name,
-                'sanitized_location' => $this->location,
             ]);
 
             $validationRules = [
-                'name' => ['required', 'string', 'max:255'],
-                'location' => ['required', 'string', 'max:255'],
+                'name' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z0-9\s\-]+$/'],
+                'location' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z0-9\s\-]+$/'],
                 'start_date' => ['required', 'date'],
                 'end_date' => ['required', 'date', 'after_or_equal:start_date'],
                 'is_active' => ['boolean'],

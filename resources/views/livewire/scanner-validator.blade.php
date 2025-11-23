@@ -751,6 +751,26 @@ new class extends Component {
             <div class="p-6 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 space-y-4">
                 <flux:heading size="lg">Ticket Details</flux:heading>
 
+                <!-- Armband Color Display (Prominent) -->
+                @if ($foundTicket->ticketType)
+                    <div class="p-6 bg-gradient-to-br from-cyan-50 to-purple-50 dark:from-cyan-900/20 dark:to-purple-900/20 rounded-lg border-2 border-cyan-200 dark:border-cyan-700">
+                        <flux:heading size="md" class="mb-3">Armband Color</flux:heading>
+                        <div class="flex items-center gap-4">
+                            <span class="inline-flex items-center px-6 py-3 rounded-full text-2xl font-bold bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200 border-2 border-cyan-300 dark:border-cyan-700">
+                                {{ $foundTicket->ticketType->getArmbandColor() }}
+                            </span>
+                            @if ($foundTicket->ticketType->price)
+                                <div>
+                                    <flux:text class="text-sm text-neutral-500">Price Paid:</flux:text>
+                                    <flux:text class="text-xl font-bold text-cyan-600 dark:text-cyan-400">
+                                        R{{ number_format($foundTicket->ticketType->price, 2) }}
+                                    </flux:text>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
+
                 <div class="grid gap-4 md:grid-cols-2">
                     <div>
                         <flux:text class="text-sm text-neutral-500">Holder Name</flux:text>
@@ -892,9 +912,15 @@ new class extends Component {
                     {{ $statusMessage }}
                 </flux:heading>
                 @if ($statusType === 'success' && $armbandInfo)
-                    <div class="mt-4 p-4 bg-white dark:bg-neutral-800 rounded-lg">
-                        <flux:text class="text-lg font-semibold text-neutral-700 dark:text-neutral-300">
-                            Give armband: <span class="text-primary">{{ $armbandInfo }}</span>
+                    <div class="mt-6 p-6 bg-white dark:bg-neutral-800 rounded-lg border-2 border-cyan-300 dark:border-cyan-700">
+                        <flux:heading size="lg" class="mb-4 text-center">Armband to Give</flux:heading>
+                        <div class="flex justify-center">
+                            <span class="inline-flex items-center px-8 py-4 rounded-full text-3xl font-bold bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200 border-4 border-cyan-400 dark:border-cyan-600 shadow-lg">
+                                {{ $armbandInfo }}
+                            </span>
+                        </div>
+                        <flux:text class="text-center text-sm text-neutral-600 dark:text-neutral-400 mt-4">
+                            Give this color armband to the ticket holder
                         </flux:text>
                     </div>
                 @endif

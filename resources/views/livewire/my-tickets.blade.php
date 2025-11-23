@@ -272,6 +272,43 @@ new class extends Component {
                         </div>
                     </div>
 
+                    <!-- Ticket Type Details (Price & Armband) -->
+                    @if ($ticket->ticketType)
+                        <div class="p-6 bg-gradient-to-br from-cyan-50 to-purple-50 dark:from-cyan-900/20 dark:to-purple-900/20 rounded-lg border-2 border-cyan-200 dark:border-cyan-700">
+                            <flux:heading size="md" class="mb-4">Ticket Information</flux:heading>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <flux:text class="text-xs font-medium text-neutral-500 uppercase mb-2">Price</flux:text>
+                                    <flux:text class="text-3xl font-bold text-cyan-600 dark:text-cyan-400">
+                                        @if ($ticket->ticketType->price)
+                                            R{{ number_format($ticket->ticketType->price, 2) }}
+                                        @else
+                                            Free
+                                        @endif
+                                    </flux:text>
+                                </div>
+                                <div>
+                                    <flux:text class="text-xs font-medium text-neutral-500 uppercase mb-2">Armband Color</flux:text>
+                                    <div class="flex items-center gap-2">
+                                        <span class="inline-flex items-center px-4 py-2 rounded-full text-lg font-bold bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200 border-2 border-cyan-300 dark:border-cyan-700">
+                                            {{ $ticket->ticketType->getArmbandColor() }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <flux:text class="text-xs font-medium text-neutral-500 uppercase mb-2">Ticket Type</flux:text>
+                                    <flux:text class="text-base font-semibold">
+                                        @if ($ticket->ticketType->isFullPass())
+                                            <span class="text-blue-600 dark:text-blue-400">Full Pass</span>
+                                        @else
+                                            <span class="text-green-600 dark:text-green-400">Day Pass</span>
+                                        @endif
+                                    </flux:text>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
                     <!-- Ticket Details Grid -->
                     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                         <div class="space-y-1">
@@ -303,7 +340,7 @@ new class extends Component {
                                     </span>
                                     @if ($ticket->ticketType)
                                         <div class="mt-2">
-                                            <flux:text class="text-xs text-neutral-500">Armband: </flux:text>
+                                            <flux:text class="text-xs text-neutral-500">Armband Given: </flux:text>
                                             <flux:text class="text-xs font-semibold">{{ $ticket->getArmbandInfo() }}</flux:text>
                                         </div>
                                     @endif
