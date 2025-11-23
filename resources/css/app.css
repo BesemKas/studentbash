@@ -23,15 +23,15 @@
     --color-zinc-900: #171717;
     --color-zinc-950: #0a0a0a;
 
-    --color-accent: var(--color-fuchsia-600);
-    --color-accent-content: var(--color-fuchsia-600);
+    --color-accent: var(--color-red-500);
+    --color-accent-content: var(--color-red-600);
     --color-accent-foreground: var(--color-white);
 }
 
 @layer theme {
     .dark {
-        --color-accent: var(--color-fuchsia-600);
-        --color-accent-content: var(--color-fuchsia-400);
+        --color-accent: var(--color-red-500);
+        --color-accent-content: var(--color-red-400);
         --color-accent-foreground: var(--color-white);
     }
 }

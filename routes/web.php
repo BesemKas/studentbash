@@ -202,9 +202,9 @@ Route::get('mail/test', function (\Illuminate\Http\Request $request) {
     }
     
     try {
-        \Illuminate\Support\Facades\Mail::raw('This is a test email from Synapse Events. If you receive this, your mail configuration is working correctly!', function ($message) use ($to) {
+        \Illuminate\Support\Facades\Mail::raw('This is a test email from Connectra. If you receive this, your mail configuration is working correctly!', function ($message) use ($to) {
             $message->to($to)
-                    ->subject('Synapse Events Mail Test');
+                    ->subject('Connectra Mail Test');
         });
 
         return response()->json([

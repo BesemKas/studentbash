@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'Synapse Events'),
+    'name' => env('APP_NAME', 'Connectra'),
 
     /*
     |--------------------------------------------------------------------------

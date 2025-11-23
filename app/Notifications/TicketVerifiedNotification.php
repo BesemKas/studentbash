@@ -55,7 +55,7 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
         ]);
 
         $mailMessage = (new MailMessage)
-            ->subject('Your Ticket Has Been Verified - Synapse Events')
+            ->subject('Your Ticket Has Been Verified - Connectra')
             ->greeting('Hello ' . $this->ticket->holder_name . '!')
             ->line('Great news! Your payment has been verified and your ticket is now active.')
             ->line('**Ticket Details:**')
@@ -65,7 +65,7 @@ class TicketVerifiedNotification extends Notification implements ShouldQueue
             ->line('QR Code: ' . $this->ticket->qr_code_text)
             ->line('Your ticket is now ready to use at the event. Please keep your QR code safe and present it at the gate.')
             ->action('View My Tickets', url('/my-tickets'))
-            ->line('Thank you for your purchase! We look forward to seeing you at Synapse Events.');
+            ->line('Thank you for your purchase! We look forward to seeing you at Connectra.');
 
         // Log when email message is successfully created
         Log::info('[TicketVerifiedNotification] Email message created successfully', [

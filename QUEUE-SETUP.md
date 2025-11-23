@@ -48,7 +48,7 @@ Replace:
 
 **Example:**
 ```bash
-curl -s "https://synapse-events.example.com/queue/process?token=abc123xyz789securetoken456"
+curl -s "https://connectra.example.com/queue/process?token=abc123xyz789securetoken456"
 ```
 
 ### Step 3: Verify It's Working

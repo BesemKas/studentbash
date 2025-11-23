@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "synapse-events/app",
+    "name": "connectra/app",
     "type": "project",
-    "description": "Synapse Events - Event management and ticketing system.",
+    "description": "Connectra - Event management and ticketing system.",
     "keywords": [
         "laravel",
         "framework"
