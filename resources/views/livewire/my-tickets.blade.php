@@ -201,7 +201,7 @@ new class extends Component {
                             </div>
                             <div>
                                 <flux:text class="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase">Account Holder:</flux:text>
-                                <flux:text class="text-sm text-blue-900 dark:text-blue-200">{{ env('BANK_ACCOUNT_HOLDER', 'Student Bash') }}</flux:text>
+                                <flux:text class="text-sm text-blue-900 dark:text-blue-200">{{ env('BANK_ACCOUNT_HOLDER', 'Synapse Events') }}</flux:text>
                             </div>
                             <div>
                                 <flux:text class="text-xs font-medium text-blue-800 dark:text-blue-300 uppercase">Account Number:</flux:text>

@@ -1,8 +1,8 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "laravel/livewire-starter-kit",
+    "name": "synapse-events/app",
     "type": "project",
-    "description": "The official Laravel starter kit for Livewire.",
+    "description": "Synapse Events - Event management and ticketing system.",
     "keywords": [
         "laravel",
         "framework"
