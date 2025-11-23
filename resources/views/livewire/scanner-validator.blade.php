@@ -749,16 +749,22 @@ new class extends Component {
     let isScanning = false;
 
     function openQrScanner() {
+        console.log('Opening QR scanner');
         const modal = document.getElementById('qrScannerModal');
         modal.classList.remove('hidden');
+        
+        // Clear any previous results
+        document.getElementById('qr-reader-results').innerHTML = '';
         
         // Initialize scanner when modal opens
         if (!html5QrcodeScanner) {
             html5QrcodeScanner = new Html5Qrcode("qr-reader");
+            console.log('Html5Qrcode initialized');
         }
         
         // Start scanning
         if (!isScanning) {
+            console.log('Starting scanner...');
             html5QrcodeScanner.start(
                 { facingMode: "environment" }, // Use back camera on mobile
                 {
@@ -769,34 +775,58 @@ new class extends Component {
                 onScanError
             ).then(() => {
                 isScanning = true;
+                console.log('Scanner started successfully');
             }).catch((err) => {
                 console.error("Unable to start scanning", err);
                 document.getElementById('qr-reader-results').innerHTML = 
                     '<div class="text-red-600">Error: Could not access camera. Please check permissions.</div>';
             });
+        } else {
+            console.log('Scanner already running');
         }
     }
 
     function closeQrScanner() {
+        console.log('Closing scanner, isScanning:', isScanning);
+        
         if (html5QrcodeScanner && isScanning) {
             html5QrcodeScanner.stop().then(() => {
                 isScanning = false;
+                console.log('Scanner stopped in closeQrScanner');
+                
+                // Hide modal after stopping
+                const modal = document.getElementById('qrScannerModal');
+                modal.classList.add('hidden');
+                
+                // Clear results
+                document.getElementById('qr-reader-results').innerHTML = '';
             }).catch((err) => {
-                console.error("Error stopping scanner", err);
+                console.error("Error stopping scanner in closeQrScanner", err);
+                isScanning = false;
+                
+                // Still hide modal even if stop fails
+                const modal = document.getElementById('qrScannerModal');
+                modal.classList.add('hidden');
+                
+                // Clear results
+                document.getElementById('qr-reader-results').innerHTML = '';
             });
+        } else {
+            // If scanner not running, just hide modal
+            const modal = document.getElementById('qrScannerModal');
+            modal.classList.add('hidden');
+            
+            // Clear results
+            document.getElementById('qr-reader-results').innerHTML = '';
         }
-        
-        const modal = document.getElementById('qrScannerModal');
-        modal.classList.add('hidden');
-        
-        // Clear results
-        document.getElementById('qr-reader-results').innerHTML = '';
     }
 
     function onScanSuccess(decodedText, decodedResult) {
         // Extract ticket code from URL
         // Expected format: /gate?ticket=TICKET_CODE or full URL with ?ticket=TICKET_CODE
         let ticketCode = null;
+        
+        console.log('QR Code scanned:', decodedText);
         
         // First, try to extract from query string pattern (works for both relative and absolute URLs)
         const match = decodedText.match(/[?&]ticket=([^&]+)/);
@@ -816,29 +846,43 @@ new class extends Component {
             }
         }
         
+        console.log('Extracted ticket code:', ticketCode);
+        
         if (ticketCode) {
-            // Stop scanning
+            // Stop scanning and close modal
             if (html5QrcodeScanner && isScanning) {
                 html5QrcodeScanner.stop().then(() => {
                     isScanning = false;
+                    console.log('Scanner stopped successfully');
+                    
+                    // Close modal after scanner stops
+                    const modal = document.getElementById('qrScannerModal');
+                    modal.classList.add('hidden');
+                    
+                    // Set the search ID and trigger search
+                    @this.set('searchId', ticketCode);
+                    @this.call('searchTicket');
+                    
+                    console.log('Search triggered with ticket code:', ticketCode);
                 }).catch((err) => {
                     console.error("Error stopping scanner", err);
+                    // Still try to close modal even if stop fails
+                    const modal = document.getElementById('qrScannerModal');
+                    modal.classList.add('hidden');
                 });
+            } else {
+                // If scanner not running, just close and search
+                const modal = document.getElementById('qrScannerModal');
+                modal.classList.add('hidden');
+                
+                @this.set('searchId', ticketCode);
+                @this.call('searchTicket');
             }
-            
-            // Close modal
-            closeQrScanner();
-            
-            // Set the search ID and trigger search
-            @this.set('searchId', ticketCode);
-            @this.call('searchTicket');
-            
-            // Show success message
-            document.getElementById('qr-reader-results').innerHTML = 
-                '<div class="text-green-600">Ticket code found: ' + ticketCode + '</div>';
         } else {
+            // Show error message in the modal
             document.getElementById('qr-reader-results').innerHTML = 
                 '<div class="text-yellow-600">Could not extract ticket code from QR code. Please try again.</div>';
+            console.log('Could not extract ticket code from:', decodedText);
         }
     }
 
