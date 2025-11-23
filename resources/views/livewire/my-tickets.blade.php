@@ -327,6 +327,27 @@ new class extends Component {
                         </div>
 
                         <div class="space-y-1">
+                            <flux:text class="text-xs font-medium text-neutral-500 uppercase">Age Status</flux:text>
+                            <div class="mt-1 flex items-center gap-2">
+                                @php
+                                    $age = $ticket->age();
+                                    $isAdult = $ticket->isAdult();
+                                @endphp
+                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $isAdult ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' }}">
+                                    {{ $isAdult ? 'ADULT' : 'MINOR' }}
+                                </span>
+                                <flux:text class="text-sm text-neutral-600 dark:text-neutral-400">
+                                    (Age: {{ $age ?? 'N/A' }})
+                                </flux:text>
+                            </div>
+                            @if ($ticket->isMinor())
+                                <flux:text class="text-xs text-blue-600 dark:text-blue-400 mt-1 block">
+                                    Note: Minors may not purchase alcohol or access age-restricted areas. ID verification required at gate.
+                                </flux:text>
+                            @endif
+                        </div>
+
+                        <div class="space-y-1">
                             <flux:text class="text-xs font-medium text-neutral-500 uppercase">Created</flux:text>
                             <flux:text class="text-base">{{ $ticket->created_at->format('M d, Y H:i') }}</flux:text>
                         </div>

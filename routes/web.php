@@ -22,6 +22,10 @@ Volt::route('my-tickets', 'my-tickets')
 Volt::route('how-to-pay', 'how-to-pay')
     ->name('how-to-pay');
 
+// Age Verification Policy route (public access)
+Route::view('age-verification-policy', 'policies.age-verification-policy')
+    ->name('age-verification-policy');
+
 // Events browsing route (public access)
 Volt::route('events', 'events')
     ->name('events.index');

@@ -8,6 +8,7 @@ use BaconQrCode\Renderer\ImageRenderer;
 use BaconQrCode\Renderer\Image\SvgImageBackEnd;
 use BaconQrCode\Renderer\RendererStyle\RendererStyle;
 use BaconQrCode\Writer;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Session;
 use Livewire\Volt\Component;
@@ -22,6 +23,7 @@ new class extends Component {
     public string $qrCodeText = '';
     public string $qrCodeSvg = '';
     public bool $sendEmailToHolder = false;
+    public bool $acceptedTerms = false;
 
     /**
      * Sanitize input to only allow letters, digits, and hyphens
@@ -308,6 +310,40 @@ new class extends Component {
     }
 
     /**
+     * Calculate age from date of birth
+     */
+    public function calculateAge(): ?int
+    {
+        if (empty($this->dob)) {
+            return null;
+        }
+
+        try {
+            $dob = Carbon::parse($this->dob);
+            return $dob->age;
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Check if ticket holder is an adult (18 or older)
+     */
+    public function isAdult(): bool
+    {
+        $age = $this->calculateAge();
+        return $age !== null && $age >= 18;
+    }
+
+    /**
+     * Check if ticket holder is a minor (under 18)
+     */
+    public function isMinor(): bool
+    {
+        return !$this->isAdult();
+    }
+
+    /**
      * Generate QR code text and image.
      */
     public function generateQrCode(): void
@@ -449,12 +485,36 @@ new class extends Component {
                 'email' => ['required', 'email', 'max:255'],
                 'dob' => ['required', 'date', 'date_format:Y-m-d'],
                 'eventTicketTypeId' => ['required', 'exists:event_ticket_types,id'],
+                'acceptedTerms' => ['required', 'accepted'],
             ]);
 
             Log::debug('[TicketGenerator] saveTicket - validation passed', [
                 'user_id' => auth()->id(),
                 'validated_data' => $validated,
             ]);
+
+            // Get ticket type to check age restrictions
+            $ticketType = EventTicketType::find($this->eventTicketTypeId);
+            if (!$ticketType) {
+                Log::error('[TicketGenerator] saveTicket - ticket type not found', [
+                    'user_id' => auth()->id(),
+                    'event_ticket_type_id' => $this->eventTicketTypeId,
+                ]);
+                throw new \Exception('Ticket type not found');
+            }
+
+            // Age verification: Check if minor is trying to purchase adult-only ticket
+            if ($this->isMinor() && $ticketType->isAdultOnly()) {
+                Log::warning('[TicketGenerator] saveTicket - age restriction violation', [
+                    'user_id' => auth()->id(),
+                    'age' => $this->calculateAge(),
+                    'ticket_type_id' => $this->eventTicketTypeId,
+                    'ticket_type_name' => $ticketType->name,
+                    'is_adult_only' => $ticketType->isAdultOnly(),
+                ]);
+                $this->addError('eventTicketTypeId', 'This ticket type is restricted to adults (18+) only. You must be 18 or older to purchase this ticket.');
+                return;
+            }
 
             // Always generate QR code fresh when button is pressed
             // Clear any existing QR code first to ensure fresh generation
@@ -514,15 +574,7 @@ new class extends Component {
                 }
             }
 
-            // Get ticket type to inherit VIP status
-            $ticketType = EventTicketType::find($this->eventTicketTypeId);
-            if (!$ticketType) {
-                Log::error('[TicketGenerator] saveTicket - ticket type not found', [
-                    'user_id' => auth()->id(),
-                    'event_ticket_type_id' => $this->eventTicketTypeId,
-                ]);
-                throw new \Exception('Ticket type not found');
-            }
+            // Ticket type already loaded above for age check
 
             Log::debug('[TicketGenerator] saveTicket - creating ticket', [
                 'user_id' => auth()->id(),
@@ -534,6 +586,9 @@ new class extends Component {
                     'is_vip' => $ticketType->is_vip,
                 ],
             ]);
+
+            // Calculate is_minor for the ticket
+            $isMinor = $this->isMinor();
 
             // Create ticket with is_verified = false (default)
             $ticket = Ticket::create([
@@ -547,6 +602,7 @@ new class extends Component {
                 'payment_ref' => $this->paymentRef,
                 'is_verified' => false,
                 'is_vip' => $ticketType->is_vip,
+                'is_minor' => $isMinor,
                 'send_email_to_holder' => $this->sendEmailToHolder,
             ]);
 
@@ -724,6 +780,20 @@ new class extends Component {
                                             </span>
                                         </div>
                                     @endif
+
+                                    @if ($this->selectedTicketType->isAdultOnly())
+                                        <div>
+                                            <flux:text class="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-1">Age Restriction:</flux:text>
+                                            <div class="flex items-center gap-2">
+                                                <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200">
+                                                    18+ Only
+                                                </span>
+                                            </div>
+                                            <flux:text class="text-xs text-red-600 dark:text-red-400 mt-1 block">
+                                                This ticket is restricted to adults (18+) only. Age verification required at gate.
+                                            </flux:text>
+                                        </div>
+                                    @endif
                                 </div>
 
                                 @if (!$this->selectedTicketType->isFullPass() && $this->selectedTicketType->getValidDates()->count() > 0)
@@ -774,26 +844,95 @@ new class extends Component {
                 />
 
                 <flux:input
-                    wire:model="dob"
+                    wire:model.live="dob"
                     label="Date of Birth"
                     type="date"
                     required
                 />
 
+                @if ($this->dob)
+                    @php
+                        $age = $this->calculateAge();
+                        $isAdult = $this->isAdult();
+                        $isMinor = $this->isMinor();
+                        $selectedType = $this->selectedTicketType;
+                        $isAdultOnlyTicket = $selectedType && $selectedType->isAdultOnly();
+                    @endphp
+                    <div class="p-4 rounded-lg border {{ $isAdult ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700' : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700' }}">
+                        <div class="flex items-center gap-3">
+                            <div>
+                                <flux:text class="text-sm font-semibold {{ $isAdult ? 'text-green-800 dark:text-green-300' : 'text-blue-800 dark:text-blue-300' }} mb-1">
+                                    Age Status:
+                                </flux:text>
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold {{ $isAdult ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' }}">
+                                        {{ $isAdult ? 'ADULT' : 'MINOR' }}
+                                    </span>
+                                    <flux:text class="text-sm {{ $isAdult ? 'text-green-700 dark:text-green-400' : 'text-blue-700 dark:text-blue-400' }}">
+                                        (Age: {{ $age ?? 'N/A' }})
+                                    </flux:text>
+                                </div>
+                            </div>
+                        </div>
+                        @if ($isMinor && $isAdultOnlyTicket)
+                            <div class="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded border border-red-200 dark:border-red-700">
+                                <flux:text class="text-sm font-semibold text-red-800 dark:text-red-300">
+                                    ⚠️ Age Restriction
+                                </flux:text>
+                                <flux:text class="text-sm text-red-700 dark:text-red-400 mt-1 block">
+                                    This ticket type is restricted to adults (18+) only. You must be 18 or older to purchase this ticket.
+                                </flux:text>
+                            </div>
+                        @endif
+                    </div>
+                @endif
+
+                <div class="p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <flux:checkbox
+                        wire:model="acceptedTerms"
+                        label="I agree to the Age Verification Policy"
+                        required
+                    />
+                    <flux:text class="text-xs text-neutral-600 dark:text-neutral-400 mt-2 block">
+                        By checking this box, you acknowledge that:
+                        <ul class="list-disc list-inside mt-1 space-y-1">
+                            <li>Your age will be verified at the event gate using valid ID</li>
+                            <li>Minors (under 18) are not permitted to purchase adult-only tickets</li>
+                            <li>Minors may not purchase alcohol or access age-restricted areas</li>
+                            <li>Providing false information may result in ticket cancellation</li>
+                        </ul>
+                        <a href="{{ route('age-verification-policy') }}" target="_blank" class="text-cyan-600 dark:text-cyan-400 hover:underline mt-2 inline-block">
+                            Read full Age Verification Policy →
+                        </a>
+                    </flux:text>
+                </div>
+
+                @php
+                    $canSubmit = $this->eventId && $this->eventTicketTypeId && $this->acceptedTerms;
+                    $selectedType = $this->selectedTicketType;
+                    $isAdultOnlyTicket = $selectedType && $selectedType->isAdultOnly();
+                    $hasAgeRestriction = $this->dob && $this->isMinor() && $isAdultOnlyTicket;
+                    $canSubmit = $canSubmit && !$hasAgeRestriction;
+                @endphp
+
                 <flux:button 
                     variant="primary" 
                     type="submit" 
                     class="w-full" 
-                    wire:disabled="!$this->eventId || !$this->eventTicketTypeId"
+                    wire:disabled="!$canSubmit"
                 >
                     Generate & Save Ticket
                 </flux:button>
-                @if (!$this->eventId || !$this->eventTicketTypeId)
+                @if (!$canSubmit)
                     <flux:text class="text-xs text-neutral-500 dark:text-neutral-400 mt-2 block text-center">
                         @if (!$this->eventId)
                             Please select an event
                         @elseif (!$this->eventTicketTypeId)
                             Please select a ticket type
+                        @elseif (!$this->acceptedTerms)
+                            Please accept the Age Verification Policy
+                        @elseif ($hasAgeRestriction)
+                            Cannot purchase: This ticket is restricted to adults (18+) only
                         @endif
                     </flux:text>
                 @endif

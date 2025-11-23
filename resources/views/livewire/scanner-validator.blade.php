@@ -805,6 +805,41 @@ new class extends Component {
                     </div>
 
                     <div>
+                        <flux:text class="text-sm text-neutral-500 mb-2">Age Status</flux:text>
+                        <div class="space-y-2">
+                            @php
+                                $age = $foundTicket->age();
+                                $isAdult = $foundTicket->isAdult();
+                                $isMinor = $foundTicket->isMinor();
+                            @endphp
+                            <div class="flex items-center gap-3">
+                                <span class="inline-flex items-center px-4 py-2 rounded-full text-base font-bold {{ $isAdult ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' }}">
+                                    {{ $isAdult ? '✓ ADULT' : '⚠ MINOR' }}
+                                </span>
+                                <flux:text class="font-semibold {{ $isAdult ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400' }}">
+                                    Age: {{ $age ?? 'N/A' }}
+                                </flux:text>
+                            </div>
+                            @if ($isMinor)
+                                <div class="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                                    <flux:text class="text-sm font-semibold text-yellow-800 dark:text-yellow-300">
+                                        ⚠️ ID Verification Required
+                                    </flux:text>
+                                    <flux:text class="text-xs text-yellow-700 dark:text-yellow-400 mt-1 block">
+                                        This ticket holder is under 18. They may not purchase alcohol or access age-restricted areas. Please verify ID at gate.
+                                    </flux:text>
+                                </div>
+                            @else
+                                <div class="p-2 bg-green-50 dark:bg-green-900/20 rounded border border-green-200 dark:border-green-700">
+                                    <flux:text class="text-xs text-green-700 dark:text-green-400">
+                                        ✓ Adult ticket - Access to all areas permitted (ID verification still required for alcohol purchases)
+                                    </flux:text>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+
+                    <div>
                         <flux:text class="text-sm text-neutral-500">Payment Reference</flux:text>
                         <flux:text class="font-semibold font-mono">{{ $foundTicket->payment_ref }}</flux:text>
                     </div>

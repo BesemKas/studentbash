@@ -12,6 +12,7 @@ new class extends Component {
     public string $name = '';
     public string $description = '';
     public bool $is_vip = false;
+    public bool $is_adult_only = false;
     public array $allowed_dates = [];
     public ?string $armband_color = null;
     public ?float $price = null;
@@ -71,7 +72,7 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
-            $this->reset(['name', 'description', 'is_vip', 'allowed_dates', 'armband_color', 'price', 'editingTicketType', 'showForm']);
+            $this->reset(['name', 'description', 'is_vip', 'is_adult_only', 'allowed_dates', 'armband_color', 'price', 'editingTicketType', 'showForm']);
 
             Log::debug('[AdminEventTicketTypes] resetForm completed successfully', [
                 'user_id' => auth()->id(),
@@ -146,6 +147,7 @@ new class extends Component {
             $this->name = $this->sanitizeInput($ticketType->name) ?? $ticketType->name;
             $this->description = $ticketType->description ?? '';
             $this->is_vip = $ticketType->is_vip;
+            $this->is_adult_only = $ticketType->is_adult_only ?? false;
             // VIP tickets should have empty allowed_dates (full pass)
             $this->allowed_dates = $ticketType->is_vip ? [] : ($ticketType->allowed_dates ?? []);
             $this->armband_color = $ticketType->armband_color;
@@ -225,6 +227,7 @@ new class extends Component {
                     'name' => $this->name,
                     'description' => $this->description,
                     'is_vip' => $this->is_vip,
+                    'is_adult_only' => $this->is_adult_only,
                     'allowed_dates' => $this->allowed_dates,
                     'armband_color' => $this->armband_color,
                     'price' => $this->price,
@@ -245,6 +248,7 @@ new class extends Component {
                 'name' => ['required', 'string', 'max:255'],
                 'description' => ['nullable', 'string'],
                 'is_vip' => ['boolean'],
+                'is_adult_only' => ['boolean'],
                 'allowed_dates' => ['nullable', 'array'],
                 'allowed_dates.*' => ['exists:event_dates,id'],
                 'armband_color' => ['nullable', 'string', 'max:50'],
@@ -540,6 +544,20 @@ new class extends Component {
                     <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
                         <flux:text class="text-sm text-blue-800 dark:text-blue-300">
                             <strong>Note:</strong> VIP tickets are automatically set as full pass and will be valid for all event dates. Date selection is disabled for VIP tickets.
+                        </flux:text>
+                    </div>
+                @endif
+
+                <flux:checkbox
+                    wire:model="is_adult_only"
+                    label="Adult Only (18+)"
+                    description="Restrict this ticket type to adults (18+) only. Minors will not be able to purchase this ticket type."
+                />
+
+                @if ($is_adult_only)
+                    <div class="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-700">
+                        <flux:text class="text-sm text-red-800 dark:text-red-300">
+                            <strong>⚠️ Age Restriction Active:</strong> This ticket type is restricted to adults (18+) only. The system will automatically prevent minors from purchasing this ticket type. Age verification will be required at the event gate.
                         </flux:text>
                     </div>
                 @endif

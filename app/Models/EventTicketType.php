@@ -15,6 +15,7 @@ class EventTicketType extends Model
         'name',
         'description',
         'is_vip',
+        'is_adult_only',
         'allowed_dates',
         'armband_color',
         'price',
@@ -22,6 +23,7 @@ class EventTicketType extends Model
 
     protected $casts = [
         'is_vip' => 'boolean',
+        'is_adult_only' => 'boolean',
         'allowed_dates' => 'array',
         'price' => 'decimal:2',
     ];
@@ -82,14 +84,14 @@ class EventTicketType extends Model
      */
     public function getArmbandColor(): string
     {
-        // VIP tickets always return 'VIP'
-        if ($this->is_vip) {
-            return 'VIP';
-        }
-
-        // If armband_color is manually set, use it (for both full pass and day pass)
+        // If armband_color is manually set, use it (for VIP, full pass, and day pass)
         if (!empty($this->armband_color)) {
             return $this->armband_color;
+        }
+
+        // For VIP tickets without manual color, default to 'VIP'
+        if ($this->is_vip) {
+            return 'VIP';
         }
 
         // For day passes without manual color, fall back to event date color
@@ -109,5 +111,13 @@ class EventTicketType extends Model
     public function isVip(): bool
     {
         return $this->is_vip;
+    }
+
+    /**
+     * Check if this ticket type is restricted to adults only (18+)
+     */
+    public function isAdultOnly(): bool
+    {
+        return $this->is_adult_only ?? false;
     }
 }
