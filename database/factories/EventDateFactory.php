@@ -16,13 +16,10 @@ class EventDateFactory extends Factory
      */
     public function definition(): array
     {
-        $colors = ['pink', 'purple', 'red', 'blue', 'green', 'yellow', 'orange', 'teal', 'indigo', 'violet'];
-
         return [
             'event_id' => \App\Models\Event::factory(),
             'date' => fake()->dateTimeBetween('now', '+6 months'),
             'day_number' => fake()->numberBetween(1, 10),
-            'armband_color' => fake()->randomElement($colors),
         ];
     }
 }

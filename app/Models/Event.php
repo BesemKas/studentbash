@@ -71,11 +71,8 @@ class Event extends Model
      */
     public function generateEventDates(): void
     {
-        $colors = ['pink', 'purple', 'red', 'blue', 'green', 'yellow', 'orange', 'teal', 'indigo', 'violet'];
-        
         $currentDate = $this->start_date->copy();
         $dayNumber = 1;
-        $colorIndex = 0;
 
         // Delete existing event dates
         $this->eventDates()->delete();
@@ -84,12 +81,10 @@ class Event extends Model
             $this->eventDates()->create([
                 'date' => $currentDate->format('Y-m-d'),
                 'day_number' => $dayNumber,
-                'armband_color' => $colors[$colorIndex % count($colors)],
             ]);
 
             $currentDate->addDay();
             $dayNumber++;
-            $colorIndex++;
         }
     }
 

@@ -905,7 +905,9 @@ new class extends Component {
                                     {{-- Day pass ticket with specific date --}}
                                     <flux:text class="block font-semibold">
                                         Day {{ $foundTicket->eventDate->day_number }}: {{ $foundTicket->eventDate->date->format('M j, Y') }}
-                                        <span class="text-neutral-500">({{ ucfirst($foundTicket->eventDate->armband_color) }} armband)</span>
+                                        @if ($foundTicket->ticketType && $foundTicket->ticketType->getArmbandColor())
+                                            <span class="text-neutral-500">({{ ucfirst($foundTicket->ticketType->getArmbandColor()) }} armband)</span>
+                                        @endif
                                     </flux:text>
                                 @elseif ($foundTicket->ticketType->isFullPass())
                                     {{-- Full pass ticket --}}

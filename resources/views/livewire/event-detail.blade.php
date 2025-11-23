@@ -136,11 +136,6 @@ new class extends Component {
                         <div class="p-4 bg-neutral-50 dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-sm font-medium text-neutral-500 dark:text-neutral-400">Day {{ $eventDate->day_number }}</span>
-                                @if ($eventDate->armband_color)
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $this->getArmbandColorClasses($eventDate->armband_color) }}">
-                                        {{ ucfirst($eventDate->armband_color) }}
-                                    </span>
-                                @endif
                             </div>
                             <p class="text-lg font-semibold text-neutral-900 dark:text-white">
                                 {{ $eventDate->date->format('F j, Y') }}

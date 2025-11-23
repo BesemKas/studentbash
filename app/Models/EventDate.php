@@ -14,7 +14,6 @@ class EventDate extends Model
         'event_id',
         'date',
         'day_number',
-        'armband_color',
     ];
 
     protected $casts = [

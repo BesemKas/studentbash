@@ -16,7 +16,6 @@ return new class extends Migration
             $table->foreignId('event_id')->constrained()->onDelete('cascade');
             $table->date('date');
             $table->integer('day_number');
-            $table->string('armband_color');
             $table->timestamps();
 
             // Indexes for common queries

@@ -105,17 +105,11 @@ new class extends Component {
             ]);
 
             $this->resetForm();
-            
-            // Pre-populate with random color
-            $colors = ['pink', 'purple', 'red', 'blue', 'green', 'yellow', 'orange', 'teal', 'indigo', 'violet'];
-            $this->armband_color = $colors[array_rand($colors)];
-            
             $this->showForm = true;
 
             Log::info('[AdminEventTicketTypes] createTicketType completed successfully', [
                 'user_id' => auth()->id(),
                 'event_id' => $this->event->id,
-                'pre_populated_color' => $this->armband_color,
             ]);
         } catch (\Exception $e) {
             Log::error('[AdminEventTicketTypes] createTicketType failed', [
@@ -631,7 +625,7 @@ new class extends Component {
                     wire:model="armband_color"
                     label="Armband Color"
                     placeholder="e.g., blue, gold, silver, pink, purple, red, green, yellow, orange, teal, indigo, violet"
-                    description="Manually set the armband color for this ticket type. Works for all ticket types (full pass, day pass, VIP). If left empty, day passes will use the event date's color as a fallback."
+                    description="Manually set the armband color for this ticket type. Works for all ticket types (full pass, day pass, VIP)."
                 />
 
                 <flux:input

@@ -894,7 +894,7 @@ new class extends Component {
                             <option value="">Select a date</option>
                             @foreach ($this->eventDates as $eventDate)
                                 <option value="{{ $eventDate->id }}">
-                                    Day {{ $eventDate->day_number }} - {{ $eventDate->date->format('M j, Y') }} ({{ ucfirst($eventDate->armband_color) }} armband)
+                                    Day {{ $eventDate->day_number }} - {{ $eventDate->date->format('M j, Y') }}
                                 </option>
                             @endforeach
                         </flux:select>
