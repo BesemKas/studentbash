@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 
 class Event extends Model
@@ -16,6 +17,7 @@ class Event extends Model
         'start_date',
         'end_date',
         'is_active',
+        'thumbnail_path',
     ];
 
     protected $casts = [
@@ -89,5 +91,27 @@ class Event extends Model
             $dayNumber++;
             $colorIndex++;
         }
+    }
+
+    /**
+     * Get the full URL for the event thumbnail
+     */
+    public function getThumbnailUrlAttribute(): ?string
+    {
+        if (!$this->thumbnail_path) {
+            return null;
+        }
+
+        // Use asset() helper which respects the current request URL
+        // This works correctly for both local development and production
+        return asset('storage/' . $this->thumbnail_path);
+    }
+
+    /**
+     * Get thumbnail URL or placeholder
+     */
+    public function getThumbnailUrlOrPlaceholder(): string
+    {
+        return $this->thumbnail_url ?? '/placeholder-event.jpg';
     }
 }

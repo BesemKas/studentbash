@@ -2,11 +2,14 @@
 
 use App\Models\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Volt\Component;
+use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new class extends Component {
     use WithPagination;
+    use WithFileUploads;
 
     public bool $showForm = false;
     public ?Event $editingEvent = null;
@@ -15,6 +18,8 @@ new class extends Component {
     public string $start_date = '';
     public string $end_date = '';
     public bool $is_active = true;
+    public $thumbnail = null;
+    public ?string $existingThumbnailUrl = null;
 
     /**
      * Sanitize input to only allow letters, digits, and hyphens
@@ -39,7 +44,7 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
-            $this->reset(['name', 'location', 'start_date', 'end_date', 'is_active', 'editingEvent', 'showForm']);
+            $this->reset(['name', 'location', 'start_date', 'end_date', 'is_active', 'editingEvent', 'showForm', 'thumbnail', 'existingThumbnailUrl']);
 
             Log::debug('[AdminEvents] resetForm completed successfully', [
                 'user_id' => auth()->id(),
@@ -104,6 +109,8 @@ new class extends Component {
             $this->start_date = $event->start_date->format('Y-m-d');
             $this->end_date = $event->end_date->format('Y-m-d');
             $this->is_active = $event->is_active;
+            $this->thumbnail = null;
+            $this->existingThumbnailUrl = $event->thumbnail_url;
             $this->showForm = true;
 
             Log::info('[AdminEvents] editEvent completed successfully', [
@@ -155,18 +162,49 @@ new class extends Component {
                 'sanitized_location' => $this->location,
             ]);
 
-            $validated = $this->validate([
+            $validationRules = [
                 'name' => ['required', 'string', 'max:255'],
                 'location' => ['required', 'string', 'max:255'],
                 'start_date' => ['required', 'date'],
                 'end_date' => ['required', 'date', 'after_or_equal:start_date'],
                 'is_active' => ['boolean'],
-            ]);
+            ];
+
+            // Add thumbnail validation only if uploading new image
+            if ($this->thumbnail) {
+                $validationRules['thumbnail'] = ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120']; // 5MB max
+            }
+
+            $validated = $this->validate($validationRules);
 
             Log::debug('[AdminEvents] saveEvent - validation passed', [
                 'user_id' => auth()->id(),
                 'validated_data' => $validated,
             ]);
+
+            // Handle thumbnail upload
+            $thumbnailPath = null;
+            if ($this->thumbnail) {
+                // Delete old thumbnail if updating
+                if ($this->editingEvent && $this->editingEvent->thumbnail_path) {
+                    Storage::disk('public')->delete($this->editingEvent->thumbnail_path);
+                }
+
+                // Store new thumbnail
+                $thumbnailPath = $this->thumbnail->store('events', 'public');
+                Log::debug('[AdminEvents] saveEvent - thumbnail uploaded', [
+                    'user_id' => auth()->id(),
+                    'thumbnail_path' => $thumbnailPath,
+                ]);
+            }
+
+            // Add thumbnail_path to validated data if uploaded
+            if ($thumbnailPath) {
+                $validated['thumbnail_path'] = $thumbnailPath;
+            } elseif ($this->editingEvent && $this->editingEvent->thumbnail_path) {
+                // Preserve existing thumbnail_path when updating without new upload
+                $validated['thumbnail_path'] = $this->editingEvent->thumbnail_path;
+            }
 
             if ($this->editingEvent) {
                 $this->editingEvent->update($validated);
@@ -250,6 +288,11 @@ new class extends Component {
                 'event_name' => $event->name,
                 'timestamp' => now()->toIso8601String(),
             ]);
+
+            // Delete thumbnail if exists
+            if ($event->thumbnail_path) {
+                Storage::disk('public')->delete($event->thumbnail_path);
+            }
 
             $event->delete();
 
@@ -372,6 +415,43 @@ new class extends Component {
                     label="Active"
                     description="Active events can be used for ticket generation"
                 />
+
+                <div>
+                    <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                        Thumbnail Image
+                    </label>
+                    <input
+                        type="file"
+                        wire:model="thumbnail"
+                        accept="image/jpeg,image/jpg,image/png,image/webp"
+                        class="block w-full text-sm text-neutral-500 dark:text-neutral-400
+                               file:mr-4 file:py-2 file:px-4
+                               file:rounded-lg file:border-0
+                               file:text-sm file:font-semibold
+                               file:bg-cyan-50 file:text-cyan-700
+                               hover:file:bg-cyan-100
+                               dark:file:bg-cyan-900/30 dark:file:text-cyan-300
+                               dark:hover:file:bg-cyan-900/50"
+                    />
+                    @error('thumbnail')
+                        <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
+                    @enderror
+                    <p class="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                        Accepted formats: JPG, PNG, WebP. Max size: 5MB
+                    </p>
+
+                    @if ($thumbnail)
+                        <div class="mt-4">
+                            <p class="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Preview:</p>
+                            <img src="{{ $thumbnail->temporaryUrl() }}" alt="Thumbnail preview" class="max-w-xs rounded-lg border border-neutral-200 dark:border-neutral-700">
+                        </div>
+                    @elseif ($existingThumbnailUrl)
+                        <div class="mt-4">
+                            <p class="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Current thumbnail:</p>
+                            <img src="{{ $existingThumbnailUrl }}" alt="Current thumbnail" class="max-w-xs rounded-lg border border-neutral-200 dark:border-neutral-700">
+                        </div>
+                    @endif
+                </div>
 
                 <div class="flex gap-4">
                     <flux:button type="submit" variant="primary" class="flex-1">

@@ -22,6 +22,14 @@ Volt::route('my-tickets', 'my-tickets')
 Volt::route('how-to-pay', 'how-to-pay')
     ->name('how-to-pay');
 
+// Events browsing route (public access)
+Volt::route('events', 'events')
+    ->name('events.index');
+
+// Event detail route (public access)
+Volt::route('events/{event}', 'event-detail')
+    ->name('events.show');
+
 // Gate validation route (admin role only)
 Volt::route('gate', 'scanner-validator')
     ->middleware(['auth'])

@@ -19,6 +19,9 @@
                     wire:navigate>{{ __('Dashboard') }}</flux:navlist.item>
                 
                 {{-- User Links (visible to all authenticated users) --}}
+                <flux:navlist.item icon="calendar" href="{{ route('events.index') }}" :current="request()->routeIs('events.*')" wire:navigate>
+                    {{ __('Browse Events') }}
+                </flux:navlist.item>
                 <flux:navlist.item icon="ticket" href="{{ route('tickets.new') }}" :current="request()->routeIs('tickets.new')" wire:navigate>
                     {{ __('Buy Tickets') }}
                 </flux:navlist.item>
