@@ -14,6 +14,7 @@ new class extends Component {
     public string $statusType = ''; // 'success', 'error', 'warning'
     public ?string $armbandInfo = null;
     public ?int $selectedEventId = null;
+    public bool $eventAutoSelected = false; // Track if event was auto-selected from ticket
 
     /**
      * Sanitize input to only allow letters, digits, and hyphens
@@ -87,6 +88,35 @@ new class extends Component {
                     'ticket_type_id' => $this->foundTicket->event_ticket_type_id,
                     'ticket_type_name' => $this->foundTicket->ticketType?->name ?? 'NULL',
                 ]);
+
+                // Auto-select event if not already selected and ticket has an event
+                if (!$this->selectedEventId && $this->foundTicket->event_id) {
+                    // Validate event exists and is active
+                    $event = Event::find($this->foundTicket->event_id);
+                    if ($event && $event->is_active) {
+                        $this->selectedEventId = $this->foundTicket->event_id;
+                        $this->eventAutoSelected = true;
+                        Session::put('gate_selected_event_id', $this->selectedEventId);
+                        
+                        Log::info('[ScannerValidator] searchTicket - event auto-selected', [
+                            'user_id' => auth()->id(),
+                            'ticket_id' => $this->foundTicket->id,
+                            'auto_selected_event_id' => $this->selectedEventId,
+                            'event_name' => $event->name,
+                        ]);
+                    } else {
+                        Log::warning('[ScannerValidator] searchTicket - ticket event not valid for auto-selection', [
+                            'user_id' => auth()->id(),
+                            'ticket_id' => $this->foundTicket->id,
+                            'ticket_event_id' => $this->foundTicket->event_id,
+                            'event_exists' => $event !== null,
+                            'event_is_active' => $event?->is_active ?? false,
+                        ]);
+                    }
+                } else {
+                    // Event was already selected or ticket has no event
+                    $this->eventAutoSelected = false;
+                }
             }
 
             Log::info('[ScannerValidator] searchTicket completed successfully', [
@@ -312,6 +342,62 @@ new class extends Component {
     }
 
     /**
+     * Handle manual event selection change
+     */
+    public function updatedSelectedEventId($value): void
+    {
+        try {
+            Log::debug('[ScannerValidator] updatedSelectedEventId started', [
+                'user_id' => auth()->id(),
+                'new_event_id' => $value,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Reset auto-selected flag when manually changed
+            $this->eventAutoSelected = false;
+
+            if ($value) {
+                // Validate event exists and is active
+                $event = Event::find($value);
+                if ($event && $event->is_active) {
+                    // Store in session
+                    Session::put('gate_selected_event_id', $value);
+                    Log::debug('[ScannerValidator] updatedSelectedEventId - event stored in session', [
+                        'user_id' => auth()->id(),
+                        'event_id' => $value,
+                        'event_name' => $event->name,
+                    ]);
+                } else {
+                    // Invalid event, clear selection
+                    $this->selectedEventId = null;
+                    Session::forget('gate_selected_event_id');
+                    Log::warning('[ScannerValidator] updatedSelectedEventId - invalid event, cleared selection', [
+                        'user_id' => auth()->id(),
+                        'event_id' => $value,
+                        'event_exists' => $event !== null,
+                        'event_is_active' => $event?->is_active ?? false,
+                    ]);
+                }
+            } else {
+                // Event cleared, remove from session
+                Session::forget('gate_selected_event_id');
+                Log::debug('[ScannerValidator] updatedSelectedEventId - event cleared from session', [
+                    'user_id' => auth()->id(),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] updatedSelectedEventId failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $value,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+        }
+    }
+
+    /**
      * Reset search and status.
      */
     public function resetSearch(): void
@@ -322,7 +408,7 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
-            $this->reset(['searchId', 'foundTicket', 'statusMessage', 'statusType', 'armbandInfo']);
+            $this->reset(['searchId', 'foundTicket', 'statusMessage', 'statusType', 'armbandInfo', 'eventAutoSelected']);
             // Note: selectedEventId is NOT reset - it persists across searches
 
             Log::debug('[ScannerValidator] resetSearch completed successfully', [
@@ -351,6 +437,31 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
+            // Load selected event from session if available
+            $sessionEventId = Session::get('gate_selected_event_id');
+            if ($sessionEventId) {
+                // Validate event still exists and is active
+                $event = Event::find($sessionEventId);
+                if ($event && $event->is_active) {
+                    $this->selectedEventId = $sessionEventId;
+                    $this->eventAutoSelected = false; // Not auto-selected on mount
+                    Log::debug('[ScannerValidator] mount - loaded event from session', [
+                        'user_id' => auth()->id(),
+                        'event_id' => $sessionEventId,
+                        'event_name' => $event->name,
+                    ]);
+                } else {
+                    // Event no longer valid, clear from session
+                    Session::forget('gate_selected_event_id');
+                    Log::warning('[ScannerValidator] mount - session event no longer valid, cleared', [
+                        'user_id' => auth()->id(),
+                        'session_event_id' => $sessionEventId,
+                        'event_exists' => $event !== null,
+                        'event_is_active' => $event?->is_active ?? false,
+                    ]);
+                }
+            }
+
             // Check for ticket parameter in URL
             $ticketParam = request()->query('ticket');
             if ($ticketParam) {
@@ -364,6 +475,7 @@ new class extends Component {
 
             Log::debug('[ScannerValidator] mount completed successfully', [
                 'user_id' => auth()->id(),
+                'selected_event_id' => $this->selectedEventId,
             ]);
         } catch (\Exception $e) {
             Log::error('[ScannerValidator] mount failed', [
@@ -509,12 +621,27 @@ new class extends Component {
                     $selectedEvent = \App\Models\Event::find($this->selectedEventId);
                 @endphp
                 @if ($selectedEvent)
-                    <flux:text class="text-sm text-neutral-500 mt-1">
-                        Selected Event: {{ $selectedEvent->name }}
-                        @if ($selectedEvent->location)
-                            - {{ $selectedEvent->location }}
+                    <div class="mt-1 flex items-center gap-2 flex-wrap">
+                        <flux:text class="text-sm text-neutral-500">
+                            Selected Event: {{ $selectedEvent->name }}
+                            @if ($selectedEvent->location)
+                                - {{ $selectedEvent->location }}
+                            @endif
+                        </flux:text>
+                        @if ($this->eventAutoSelected)
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                Auto-selected
+                            </span>
                         @endif
-                    </flux:text>
+                    </div>
+                    @if ($this->eventAutoSelected)
+                        <flux:text class="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                            Event automatically selected from scanned ticket. You can change it manually if needed.
+                        </flux:text>
+                    @endif
                 @endif
             @else
                 <flux:text class="text-sm text-yellow-600 dark:text-yellow-400 mt-1">Please select an event below</flux:text>
