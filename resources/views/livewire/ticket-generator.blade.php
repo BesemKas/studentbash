@@ -100,33 +100,35 @@ new class extends Component {
                     ]);
                 }
             }
-
-            if (in_array($propertyName, ['holderName', 'dob', 'eventTicketTypeId'])) {
-                // Only generate QR code if we have all required data
-                // Use a try-catch to prevent exceptions from breaking Livewire
-                try {
-                    $this->generateQrCode();
-                } catch (\Exception $e) {
-                    // Log but don't throw - allow the property update to complete
-                    Log::warning('[TicketGenerator] updated - generateQrCode failed, continuing', [
-                        'user_id' => auth()->id(),
-                        'property_name' => $propertyName,
-                        'error' => $e->getMessage(),
-                    ]);
-                    // Clear QR code on error
-                    $this->qrCodeText = '';
-                    $this->qrCodeSvg = '';
-                }
-            }
             
-            // Reset ticket type when event changes
+            // Reset ticket type and clear QR code when event changes
             if ($propertyName === 'eventId') {
                 $this->eventTicketTypeId = null;
                 $this->qrCodeText = '';
                 $this->qrCodeSvg = '';
-                Log::debug('[TicketGenerator] updated - event changed, reset ticket type', [
+                Log::debug('[TicketGenerator] updated - event changed, reset ticket type and cleared QR code', [
                     'user_id' => auth()->id(),
                     'event_id' => $this->eventId,
+                ]);
+            }
+            
+            // Clear QR code when ticket type changes (will be regenerated on button press)
+            if ($propertyName === 'eventTicketTypeId') {
+                $this->qrCodeText = '';
+                $this->qrCodeSvg = '';
+                Log::debug('[TicketGenerator] updated - ticket type changed, cleared QR code', [
+                    'user_id' => auth()->id(),
+                    'event_ticket_type_id' => $this->eventTicketTypeId,
+                ]);
+            }
+            
+            // Clear QR code when holder name or DOB changes (will be regenerated on button press)
+            if (in_array($propertyName, ['holderName', 'dob'])) {
+                $this->qrCodeText = '';
+                $this->qrCodeSvg = '';
+                Log::debug('[TicketGenerator] updated - field changed, cleared QR code', [
+                    'user_id' => auth()->id(),
+                    'property_name' => $propertyName,
                 ]);
             }
 
@@ -406,7 +408,9 @@ new class extends Component {
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
-            throw $e;
+            // Don't throw exception - clear QR code instead to prevent breaking Livewire updates
+            $this->qrCodeText = '';
+            $this->qrCodeSvg = '';
         }
     }
 
@@ -449,12 +453,23 @@ new class extends Component {
                 'validated_data' => $validated,
             ]);
 
-            // Ensure QR code is generated
+            // Always generate QR code fresh when button is pressed
+            // Clear any existing QR code first to ensure fresh generation
+            $this->qrCodeText = '';
+            $this->qrCodeSvg = '';
+            
+            Log::debug('[TicketGenerator] saveTicket - generating QR code', [
+                'user_id' => auth()->id(),
+            ]);
+            $this->generateQrCode();
+            
+            // Verify QR code was generated
             if (empty($this->qrCodeText)) {
-                Log::debug('[TicketGenerator] saveTicket - QR code empty, generating', [
+                Log::error('[TicketGenerator] saveTicket - QR code generation failed', [
                     'user_id' => auth()->id(),
                 ]);
-                $this->generateQrCode();
+                $this->addError('general', 'Failed to generate ticket QR code. Please try again.');
+                return;
             }
 
             // Generate payment reference
@@ -605,7 +620,7 @@ new class extends Component {
 
     <!-- Form Section -->
     <div class="space-y-6">
-            <form wire:submit="saveTicket" class="space-y-6">
+            <form wire:submit="saveTicket" method="POST" class="space-y-6">
                 <flux:select
                     wire:model.live="eventId"
                     label="Event"
@@ -628,7 +643,7 @@ new class extends Component {
 
                 @if ($this->eventId && $this->ticketTypes->count() > 0)
                     <flux:select
-                        wire:model.live="eventTicketTypeId"
+                        wire:model="eventTicketTypeId"
                         label="Ticket Type"
                         required
                         placeholder="Select ticket type"
