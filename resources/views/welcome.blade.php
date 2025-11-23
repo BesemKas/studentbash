@@ -9,8 +9,8 @@
     <section class="relative min-h-[90vh] flex items-center justify-center overflow-hidden">
         <!-- Background Image Placeholder -->
         <div class="absolute inset-0 z-0">
-            <img src="/welcome.jpeg" alt="Connectra Hero" class="w-full h-full object-cover opacity-20 dark:opacity-10" />
-            <div class="absolute inset-0 bg-gradient-to-b from-zinc-900/50 via-zinc-900/30 to-zinc-900/70 dark:from-zinc-950/80 dark:via-zinc-950/60 dark:to-zinc-950/90"></div>
+            <img src="/crowds-of-people-at-a-concert-having-fun-under-red-2025-02-13-04-03-17-utc.jpg" alt="Connectra Hero" class="w-full h-full object-cover opacity-40 dark:opacity-30" />
+            <div class="absolute inset-0 bg-gradient-to-b from-zinc-900/30 via-zinc-900/20 to-zinc-900/50 dark:from-zinc-950/50 dark:via-zinc-950/40 dark:to-zinc-950/60"></div>
         </div>
         
         <!-- Hero Content -->
