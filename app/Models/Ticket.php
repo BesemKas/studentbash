@@ -13,6 +13,7 @@ class Ticket extends Model
     protected $fillable = [
         'user_id',
         'event_id',
+        'event_date_id',
         'event_ticket_type_id',
         'qr_code_text',
         'holder_name',
@@ -57,6 +58,14 @@ class Ticket extends Model
     public function ticketType(): BelongsTo
     {
         return $this->belongsTo(EventTicketType::class, 'event_ticket_type_id');
+    }
+
+    /**
+     * Get the event date this ticket is valid for (for day pass tickets)
+     */
+    public function eventDate(): BelongsTo
+    {
+        return $this->belongsTo(EventDate::class);
     }
 
     /**

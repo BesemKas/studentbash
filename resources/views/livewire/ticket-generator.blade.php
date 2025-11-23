@@ -19,6 +19,7 @@ new class extends Component {
     public string $email = '';
     public string $dob = '';
     public ?int $eventTicketTypeId = null;
+    public ?int $selectedEventDateId = null;
     public string $paymentRef = '';
     public string $qrCodeText = '';
     public string $qrCodeSvg = '';
@@ -118,9 +119,20 @@ new class extends Component {
             if ($propertyName === 'eventTicketTypeId') {
                 $this->qrCodeText = '';
                 $this->qrCodeSvg = '';
+                $this->selectedEventDateId = null; // Reset date selection when ticket type changes
                 Log::debug('[TicketGenerator] updated - ticket type changed, cleared QR code', [
                     'user_id' => auth()->id(),
                     'event_ticket_type_id' => $this->eventTicketTypeId,
+                ]);
+            }
+
+            // Clear QR code when event date changes (will be regenerated on button press)
+            if ($propertyName === 'selectedEventDateId') {
+                $this->qrCodeText = '';
+                $this->qrCodeSvg = '';
+                Log::debug('[TicketGenerator] updated - event date changed, cleared QR code', [
+                    'user_id' => auth()->id(),
+                    'selected_event_date_id' => $this->selectedEventDateId,
                 ]);
             }
             
@@ -344,6 +356,45 @@ new class extends Component {
     }
 
     /**
+     * Get available event dates for selected event
+     */
+    public function getEventDatesProperty()
+    {
+        if (!$this->eventId) {
+            return collect();
+        }
+
+        try {
+            $event = Event::find($this->eventId);
+            if (!$event) {
+                return collect();
+            }
+
+            return $event->eventDates()->orderBy('date')->get();
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] getEventDatesProperty failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->eventId,
+                'error' => $e->getMessage(),
+            ]);
+            return collect();
+        }
+    }
+
+    /**
+     * Check if selected ticket type is a day pass
+     */
+    public function isDayPassTicketType(): bool
+    {
+        if (!$this->selectedTicketType) {
+            return false;
+        }
+
+        // Day pass: has allowed_dates set (even if empty array) and not VIP
+        return !$this->selectedTicketType->is_vip && ($this->selectedTicketType->allowed_dates !== null);
+    }
+
+    /**
      * Generate QR code text and image.
      */
     public function generateQrCode(): void
@@ -516,6 +567,38 @@ new class extends Component {
                 return;
             }
 
+            // Validate event date selection for day pass tickets
+            $isDayPass = !$ticketType->is_vip && ($ticketType->allowed_dates !== null);
+            $eventDateId = null;
+
+            if ($isDayPass) {
+                if (!$this->selectedEventDateId) {
+                    Log::warning('[TicketGenerator] saveTicket - day pass ticket requires date selection', [
+                        'user_id' => auth()->id(),
+                        'ticket_type_id' => $this->eventTicketTypeId,
+                    ]);
+                    $this->addError('selectedEventDateId', 'Please select an event date for this day pass ticket.');
+                    return;
+                }
+
+                // Validate that the selected date belongs to the event
+                $eventDate = \App\Models\EventDate::where('id', $this->selectedEventDateId)
+                    ->where('event_id', $this->eventId)
+                    ->first();
+
+                if (!$eventDate) {
+                    Log::warning('[TicketGenerator] saveTicket - invalid event date selected', [
+                        'user_id' => auth()->id(),
+                        'event_id' => $this->eventId,
+                        'selected_event_date_id' => $this->selectedEventDateId,
+                    ]);
+                    $this->addError('selectedEventDateId', 'The selected date is not valid for this event.');
+                    return;
+                }
+
+                $eventDateId = $this->selectedEventDateId;
+            }
+
             // Always generate QR code fresh when button is pressed
             // Clear any existing QR code first to ensure fresh generation
             $this->qrCodeText = '';
@@ -594,6 +677,7 @@ new class extends Component {
             $ticket = Ticket::create([
                 'user_id' => auth()->id(),
                 'event_id' => $this->eventId,
+                'event_date_id' => $eventDateId,
                 'event_ticket_type_id' => $this->eventTicketTypeId,
                 'qr_code_text' => $this->qrCodeText,
                 'holder_name' => $this->holderName,
@@ -767,7 +851,7 @@ new class extends Component {
                                             @if ($this->selectedTicketType->isFullPass())
                                                 <span class="font-semibold text-blue-600 dark:text-blue-400">Full Pass</span> - All event dates
                                             @else
-                                                <span class="font-semibold text-green-600 dark:text-green-400">Day Pass</span> - {{ $this->selectedTicketType->getValidDates()->count() }} day(s)
+                                                <span class="font-semibold text-green-600 dark:text-green-400">Day Pass</span> - Select date when purchasing
                                             @endif
                                         </flux:text>
                                     </div>
@@ -796,22 +880,32 @@ new class extends Component {
                                     @endif
                                 </div>
 
-                                @if (!$this->selectedTicketType->isFullPass() && $this->selectedTicketType->getValidDates()->count() > 0)
-                                    <div>
-                                        <flux:text class="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2">Valid Dates:</flux:text>
-                                        <div class="space-y-1">
-                                            @foreach ($this->selectedTicketType->getValidDates() as $date)
-                                                <div class="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
-                                                    <span>Day {{ $date->day_number }}:</span>
-                                                    <span class="font-medium">{{ $date->date->format('M j, Y') }}</span>
-                                                    <span class="text-xs">({{ ucfirst($date->armband_color) }} armband)</span>
-                                                </div>
-                                            @endforeach
-                                        </div>
-                                    </div>
-                                @endif
                             </div>
                         </div>
+                    @endif
+
+                    @if ($this->selectedTicketType && $this->isDayPassTicketType())
+                        <flux:select
+                            wire:model="selectedEventDateId"
+                            label="Select Event Date"
+                            required
+                            placeholder="Choose a date"
+                        >
+                            <option value="">Select a date</option>
+                            @foreach ($this->eventDates as $eventDate)
+                                <option value="{{ $eventDate->id }}">
+                                    Day {{ $eventDate->day_number }} - {{ $eventDate->date->format('M j, Y') }} ({{ ucfirst($eventDate->armband_color) }} armband)
+                                </option>
+                            @endforeach
+                        </flux:select>
+
+                        @if ($this->eventDates->count() === 0)
+                            <div class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
+                                <flux:text class="text-yellow-800 dark:text-yellow-300">
+                                    No event dates available for this event. Please contact administrator.
+                                </flux:text>
+                            </div>
+                        @endif
                     @endif
                 @elseif ($this->eventId && $this->ticketTypes->count() === 0)
                     <div class="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-700">
@@ -912,7 +1006,9 @@ new class extends Component {
                     $selectedType = $this->selectedTicketType;
                     $isAdultOnlyTicket = $selectedType && $selectedType->isAdultOnly();
                     $hasAgeRestriction = $this->dob && $this->isMinor() && $isAdultOnlyTicket;
-                    $canSubmit = $canSubmit && !$hasAgeRestriction;
+                    $isDayPass = $selectedType && $this->isDayPassTicketType();
+                    $hasDateSelected = $isDayPass ? ($this->selectedEventDateId !== null) : true;
+                    $canSubmit = $canSubmit && !$hasAgeRestriction && $hasDateSelected;
                 @endphp
 
                 <flux:button 
@@ -929,6 +1025,8 @@ new class extends Component {
                             Please select an event
                         @elseif (!$this->eventTicketTypeId)
                             Please select a ticket type
+                        @elseif ($isDayPass && !$this->selectedEventDateId)
+                            Please select an event date
                         @elseif (!$this->acceptedTerms)
                             Please accept the Age Verification Policy
                         @elseif ($hasAgeRestriction)

@@ -13,6 +13,7 @@ new class extends Component {
     public string $description = '';
     public bool $is_vip = false;
     public bool $is_adult_only = false;
+    public bool $is_day_pass = false;
     public array $allowed_dates = [];
     public ?string $armband_color = null;
     public ?float $price = null;
@@ -72,7 +73,7 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
-            $this->reset(['name', 'description', 'is_vip', 'is_adult_only', 'allowed_dates', 'armband_color', 'price', 'editingTicketType', 'showForm']);
+            $this->reset(['name', 'description', 'is_vip', 'is_adult_only', 'is_day_pass', 'allowed_dates', 'armband_color', 'price', 'editingTicketType', 'showForm']);
 
             Log::debug('[AdminEventTicketTypes] resetForm completed successfully', [
                 'user_id' => auth()->id(),
@@ -148,6 +149,8 @@ new class extends Component {
             $this->description = $ticketType->description ?? '';
             $this->is_vip = $ticketType->is_vip;
             $this->is_adult_only = $ticketType->is_adult_only ?? false;
+            // Determine if it's a day pass: has allowed_dates set (even if empty array) and not VIP
+            $this->is_day_pass = !$ticketType->is_vip && ($ticketType->allowed_dates !== null);
             // VIP tickets should have empty allowed_dates (full pass)
             $this->allowed_dates = $ticketType->is_vip ? [] : ($ticketType->allowed_dates ?? []);
             $this->armband_color = $ticketType->armband_color;
@@ -174,6 +177,39 @@ new class extends Component {
     }
 
     /**
+     * Handle Day Pass checkbox change
+     */
+    public function updatedIsDayPass($value): void
+    {
+        try {
+            Log::debug('[AdminEventTicketTypes] updatedIsDayPass started', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+                'is_day_pass' => $value,
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Clear allowed_dates when toggling day pass
+            $this->allowed_dates = [];
+
+            Log::debug('[AdminEventTicketTypes] updatedIsDayPass completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] updatedIsDayPass failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            // Don't throw - this is a UI update method
+        }
+    }
+
+    /**
      * Handle VIP checkbox change - automatically clear allowed_dates
      */
     public function updatedIsVip($value): void
@@ -186,10 +222,11 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
-            // If VIP is checked, clear allowed_dates (VIP tickets are always full pass)
+            // If VIP is checked, clear allowed_dates and uncheck day pass (VIP tickets are always full pass)
             if ($value) {
                 $this->allowed_dates = [];
-                Log::debug('[AdminEventTicketTypes] updatedIsVip - VIP checked, cleared allowed_dates', [
+                $this->is_day_pass = false;
+                Log::debug('[AdminEventTicketTypes] updatedIsVip - VIP checked, cleared allowed_dates and day pass', [
                     'user_id' => auth()->id(),
                     'event_id' => $this->event->id,
                 ]);
@@ -249,6 +286,7 @@ new class extends Component {
                 'description' => ['nullable', 'string'],
                 'is_vip' => ['boolean'],
                 'is_adult_only' => ['boolean'],
+                'is_day_pass' => ['boolean'],
                 'allowed_dates' => ['nullable', 'array'],
                 'allowed_dates.*' => ['exists:event_dates,id'],
                 'armband_color' => ['nullable', 'string', 'max:50'],
@@ -268,8 +306,15 @@ new class extends Component {
                     'user_id' => auth()->id(),
                     'event_id' => $this->event->id,
                 ]);
-            } elseif (empty($validated['allowed_dates'])) {
-                // If allowed_dates is empty and not VIP, set to null (full pass)
+            } elseif ($this->is_day_pass) {
+                // Day pass: set allowed_dates to empty array (users will select date at purchase)
+                $validated['allowed_dates'] = [];
+                Log::debug('[AdminEventTicketTypes] saveTicketType - Day pass ticket, set allowed_dates to empty array', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->event->id,
+                ]);
+            } else {
+                // Full pass: set allowed_dates to null (valid for all dates)
                 $validated['allowed_dates'] = null;
             }
 
@@ -562,35 +607,25 @@ new class extends Component {
                     </div>
                 @endif
 
-                <div>
-                    <flux:label>Valid Dates</flux:label>
-                    <flux:text class="text-sm text-neutral-500 mb-2">
-                        @if ($is_vip)
-                            VIP tickets are automatically full pass (all dates). Select dates for day passes only.
-                        @else
-                            Select which event dates this ticket type is valid for. Leave empty for full pass (all dates).
-                        @endif
-                    </flux:text>
-                    <div class="space-y-2 max-h-48 overflow-y-auto border border-neutral-200 dark:border-neutral-700 rounded-lg p-4 {{ $is_vip ? 'opacity-50 pointer-events-none' : '' }}">
-                        @foreach ($this->eventDates as $eventDate)
-                            <label class="flex items-center space-x-2 {{ $is_vip ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900' }} p-2 rounded">
-                                <input
-                                    type="checkbox"
-                                    wire:model="allowed_dates"
-                                    value="{{ $eventDate->id }}"
-                                    class="rounded border-neutral-300 text-primary focus:ring-primary"
-                                    @if($is_vip) disabled @endif
-                                />
-                                <span class="text-sm">
-                                    Day {{ $eventDate->day_number }} ({{ $eventDate->date->format('M j, Y') }}) - 
-                                    <span class="font-semibold" style="color: {{ $eventDate->armband_color }};">
-                                        {{ ucfirst($eventDate->armband_color) }} armband
-                                    </span>
-                                </span>
-                            </label>
-                        @endforeach
+                <flux:checkbox
+                    wire:model.live="is_day_pass"
+                    label="Day Pass"
+                    description="Day pass tickets allow users to select a specific date when purchasing. Uncheck for full pass (valid for all event dates)."
+                />
+
+                @if ($is_day_pass)
+                    <div class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700">
+                        <flux:text class="text-sm text-blue-800 dark:text-blue-300">
+                            <strong>Day Pass Active:</strong> Users will be able to select which specific event date they want when purchasing this ticket type. The ticket will be valid only for the selected date.
+                        </flux:text>
                     </div>
-                </div>
+                @elseif (!$is_vip)
+                    <div class="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+                        <flux:text class="text-sm text-green-800 dark:text-green-300">
+                            <strong>Full Pass:</strong> This ticket type is valid for all event dates. Users will have access to all days of the event.
+                        </flux:text>
+                    </div>
+                @endif
 
                 <flux:input
                     wire:model="armband_color"

@@ -25,7 +25,7 @@ new class extends Component {
             ]);
 
             $tickets = Auth::user()->tickets()
-                ->with(['event', 'ticketType'])
+                ->with(['event', 'ticketType', 'eventDate'])
                 ->orderBy('created_at', 'desc')
                 ->paginate(10);
 
@@ -375,11 +375,19 @@ new class extends Component {
 
                         @if ($ticket->ticketType)
                             <div class="space-y-1">
-                                <flux:text class="text-xs font-medium text-neutral-500 uppercase">Valid Dates</flux:text>
+                                <flux:text class="text-xs font-medium text-neutral-500 uppercase">Valid Date</flux:text>
                                 <div class="text-xs mt-1">
-                                    @if ($ticket->ticketType->isFullPass())
+                                    @if ($ticket->event_date_id && $ticket->eventDate)
+                                        {{-- Day pass ticket with specific date --}}
+                                        <flux:text class="block font-semibold">
+                                            Day {{ $ticket->eventDate->day_number }}: {{ $ticket->eventDate->date->format('M j, Y') }}
+                                            <span class="text-neutral-500 font-normal">({{ ucfirst($ticket->eventDate->armband_color) }} armband)</span>
+                                        </flux:text>
+                                    @elseif ($ticket->ticketType->isFullPass())
+                                        {{-- Full pass ticket --}}
                                         <flux:text>All event dates</flux:text>
                                     @else
+                                        {{-- Legacy day pass (backward compatibility) --}}
                                         @foreach ($ticket->ticketType->getValidDates() as $date)
                                             <div class="mb-1">
                                                 Day {{ $date->day_number }}: {{ $date->date->format('M j, Y') }}

@@ -76,7 +76,9 @@ class EventTicketType extends Model
      */
     public function isFullPass(): bool
     {
-        return empty($this->allowed_dates);
+        // Full pass: allowed_dates is null
+        // Day pass: allowed_dates is empty array []
+        return $this->allowed_dates === null;
     }
 
     /**

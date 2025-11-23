@@ -293,16 +293,36 @@ new class extends Component {
                 return;
             }
 
-            if (!$this->foundTicket->ticketType->isValidForDate($eventDate->id)) {
-                $this->statusMessage = 'DENIED - TICKET NOT VALID FOR TODAY';
-                $this->statusType = 'error';
-                Log::warning('[ScannerValidator] checkIn - ticket not valid for today', [
-                    'user_id' => auth()->id(),
-                    'ticket_id' => $this->foundTicket->id,
-                    'event_date_id' => $eventDate->id,
-                    'ticket_type_id' => $this->foundTicket->ticketType->id,
-                ]);
-                return;
+            // Validate ticket date: if ticket has event_date_id (day pass), it must match current date
+            if ($this->foundTicket->event_date_id) {
+                // Day pass ticket: must match the specific date
+                if ($this->foundTicket->event_date_id !== $eventDate->id) {
+                    $ticketEventDate = $this->foundTicket->eventDate;
+                    $this->statusMessage = 'DENIED - TICKET NOT VALID FOR TODAY';
+                    $this->statusType = 'error';
+                    Log::warning('[ScannerValidator] checkIn - day pass ticket not valid for today', [
+                        'user_id' => auth()->id(),
+                        'ticket_id' => $this->foundTicket->id,
+                        'ticket_event_date_id' => $this->foundTicket->event_date_id,
+                        'current_event_date_id' => $eventDate->id,
+                        'ticket_date' => $ticketEventDate?->date?->format('Y-m-d'),
+                        'current_date' => $currentDate,
+                    ]);
+                    return;
+                }
+            } else {
+                // Full pass ticket: use existing validation logic
+                if (!$this->foundTicket->ticketType->isValidForDate($eventDate->id)) {
+                    $this->statusMessage = 'DENIED - TICKET NOT VALID FOR TODAY';
+                    $this->statusType = 'error';
+                    Log::warning('[ScannerValidator] checkIn - ticket not valid for today', [
+                        'user_id' => auth()->id(),
+                        'ticket_id' => $this->foundTicket->id,
+                        'event_date_id' => $eventDate->id,
+                        'ticket_type_id' => $this->foundTicket->ticketType->id,
+                    ]);
+                    return;
+                }
             }
 
             // Mark ticket as used
@@ -879,11 +899,19 @@ new class extends Component {
 
                     @if ($foundTicket->ticketType)
                         <div>
-                            <flux:text class="text-sm text-neutral-500">Valid Dates</flux:text>
+                            <flux:text class="text-sm text-neutral-500">Valid Date</flux:text>
                             <div class="text-xs">
-                                @if ($foundTicket->ticketType->isFullPass())
+                                @if ($foundTicket->event_date_id && $foundTicket->eventDate)
+                                    {{-- Day pass ticket with specific date --}}
+                                    <flux:text class="block font-semibold">
+                                        Day {{ $foundTicket->eventDate->day_number }}: {{ $foundTicket->eventDate->date->format('M j, Y') }}
+                                        <span class="text-neutral-500">({{ ucfirst($foundTicket->eventDate->armband_color) }} armband)</span>
+                                    </flux:text>
+                                @elseif ($foundTicket->ticketType->isFullPass())
+                                    {{-- Full pass ticket --}}
                                     <flux:text>All event dates</flux:text>
                                 @else
+                                    {{-- Legacy day pass (shouldn't happen with new system, but for backward compatibility) --}}
                                     @foreach ($foundTicket->ticketType->getValidDates() as $date)
                                         <flux:text class="block">
                                             Day {{ $date->day_number }}: {{ $date->date->format('M j, Y') }}
