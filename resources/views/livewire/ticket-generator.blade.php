@@ -725,9 +725,23 @@ new class extends Component {
                     required
                 />
 
-                <flux:button variant="primary" type="submit" class="w-full" :disabled="!$this->eventId || !$this->eventTicketTypeId">
+                <flux:button 
+                    variant="primary" 
+                    type="submit" 
+                    class="w-full" 
+                    wire:disabled="!$this->eventId || !$this->eventTicketTypeId"
+                >
                     Generate & Save Ticket
                 </flux:button>
+                @if (!$this->eventId || !$this->eventTicketTypeId)
+                    <flux:text class="text-xs text-neutral-500 dark:text-neutral-400 mt-2 block text-center">
+                        @if (!$this->eventId)
+                            Please select an event
+                        @elseif (!$this->eventTicketTypeId)
+                            Please select a ticket type
+                        @endif
+                    </flux:text>
+                @endif
             </form>
         </div>
     </div>
