@@ -23,7 +23,7 @@ new class extends Component {
             <div class="flex-1">
                 <flux:heading size="lg" class="text-blue-700 dark:text-blue-400 mb-2">Payment Process</flux:heading>
                 <flux:text class="text-blue-900 dark:text-blue-300 mb-4">
-                    After creating a ticket, you'll receive a unique <strong>Payment Reference</strong>. Use this reference when making your payment via Bank Transfer. Your ticket will remain inactive until payment is verified by an administrator.
+                    After creating a ticket, you'll receive a unique <strong>Payment Reference</strong>. Use this reference when making your payment through Bank Transfer. Your ticket will remain inactive until payment is verified by an administrator.
                 </flux:text>
             </div>
         </div>
@@ -73,7 +73,7 @@ new class extends Component {
                     <div class="flex-1">
                         <flux:heading size="md" class="mb-2">Make Your Payment</flux:heading>
                         <flux:text class="text-neutral-600 dark:text-neutral-400 mb-3">
-                            Complete your payment using the payment method below and your Payment Reference.
+                            Complete your payment using your Payment Reference via Bank Transfer as shown below.
                         </flux:text>
                     </div>
                 </div>
