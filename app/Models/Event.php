@@ -97,9 +97,15 @@ class Event extends Model
             return null;
         }
 
-        // Use asset() helper which respects the current request URL
-        // This works correctly for both local development and production
-        return asset('storage/' . $this->thumbnail_path);
+        // Use route() helper to serve files through Laravel
+        // This works around servers that block direct access to symlinked directories
+        // Falls back to asset() if route doesn't exist (for backwards compatibility)
+        try {
+            return route('storage.serve', ['path' => $this->thumbnail_path]);
+        } catch (\Exception $e) {
+            // Fallback to direct asset URL if route doesn't exist
+            return asset('storage/' . $this->thumbnail_path);
+        }
     }
 
     /**

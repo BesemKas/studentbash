@@ -1,9 +1,17 @@
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
-        Options -MultiViews -Indexes
+        Options -MultiViews -Indexes +FollowSymLinks +SymLinksIfOwnerMatch
     </IfModule>
 
     RewriteEngine On
+
+    # Route all /storage/* requests to Laravel (bypass Apache's direct file serving)
+    # This allows Laravel to serve files through StorageController when symlinks are blocked
+    # This MUST come first and route ALL /storage/ requests, even if files exist
+    # Apache may block symlinked files, so we route everything to Laravel
+    # Use ^storage/ (without leading slash) because RewriteRule matches against the path relative to the directory
+    RewriteCond %{REQUEST_URI} ^/storage/
+    RewriteRule ^storage/(.*)$ index.php [L,QSA]
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .

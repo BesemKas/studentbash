@@ -8,6 +8,13 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
+// Storage file serving route (workaround for servers blocking symlink access)
+// This route serves files from storage/app/public when direct access is blocked
+// Using /files/ instead of /storage/ to avoid Apache blocking the symlink
+Route::get('files/{path}', [App\Http\Controllers\StorageController::class, 'serve'])
+    ->where('path', '.*')
+    ->name('storage.serve');
+
 // Ticket sales route (authenticated users only)
 Volt::route('tickets/new', 'ticket-generator')
     ->middleware(['auth'])
