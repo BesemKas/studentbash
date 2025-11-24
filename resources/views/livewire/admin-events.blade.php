@@ -644,11 +644,71 @@ new class extends Component {
                     <flux:button type="submit" variant="primary" class="flex-1">
                         {{ $editingEvent ? 'Update Event' : 'Create Event' }}
                     </flux:button>
-                    <flux:button wire:click="resetForm" variant="ghost">
+                    <flux:button wire:click="resetForm" variant="ghost" type="button">
                         Cancel
                     </flux:button>
                 </div>
             </form>
+            
+            <script>
+                // Debug: Log form submission details
+                // Use Livewire's hook to ensure script runs after component updates
+                document.addEventListener('livewire:init', function() {
+                    setupFormDebugging();
+                });
+                
+                // Also run immediately if Livewire is already loaded
+                if (typeof window.Livewire !== 'undefined') {
+                    setupFormDebugging();
+                }
+                
+                // Also run on DOMContentLoaded as fallback
+                document.addEventListener('DOMContentLoaded', function() {
+                    setTimeout(setupFormDebugging, 100);
+                });
+                
+                function setupFormDebugging() {
+                    // Find form by action URL pattern
+                    const forms = document.querySelectorAll('form[enctype="multipart/form-data"]');
+                    forms.forEach(function(form) {
+                        // Check if this is the event form (has thumbnail input)
+                        const hasThumbnailInput = form.querySelector('input[type="file"][name="thumbnail"]');
+                        if (!hasThumbnailInput) return;
+                        
+                        // Skip if already has listener
+                        if (form.dataset.debugAttached) return;
+                        form.dataset.debugAttached = 'true';
+                        
+                        form.addEventListener('submit', function(e) {
+                            const formData = new FormData(form);
+                            const fileInput = form.querySelector('input[type="file"][name="thumbnail"]');
+                            const file = fileInput?.files[0];
+                            
+                            console.log('[AdminEvents] Form submission debug', {
+                                hasFile: !!file,
+                                fileName: file?.name,
+                                fileSize: file?.size,
+                                fileType: file?.type,
+                                formDataKeys: Array.from(formData.keys()),
+                                formDataHasThumbnail: formData.has('thumbnail'),
+                                contentType: form.enctype,
+                                formAction: form.action,
+                            });
+                            
+                            // Verify file is in FormData
+                            if (file) {
+                                console.log('[AdminEvents] File will be submitted:', {
+                                    name: file.name,
+                                    size: file.size,
+                                    type: file.type,
+                                });
+                            } else {
+                                console.warn('[AdminEvents] No file selected for upload');
+                            }
+                        });
+                    });
+                }
+            </script>
 
         </div>
     @endif

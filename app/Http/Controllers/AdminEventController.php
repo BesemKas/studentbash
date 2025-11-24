@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 class AdminEventController extends Controller
 {
@@ -16,7 +15,117 @@ class AdminEventController extends Controller
                 'user_id' => auth()->id(),
                 'has_file' => $request->hasFile('thumbnail'),
                 'event_id' => $request->input('event_id'),
+                'request_method' => $request->method(),
+                'content_type' => $request->header('Content-Type'),
+                'all_files' => array_keys($request->allFiles()),
+                'all_input_keys' => array_keys($request->all()),
                 'timestamp' => now()->toIso8601String(),
+            ]);
+            
+            // Check for file - use allFiles() as well since hasFile() can return false for empty files
+            $file = $request->file('thumbnail');
+            $hasValidFile = false;
+            
+            if ($file) {
+                // Safely check file validity - wrap in try-catch since even isValid() can throw errors on empty files
+                $isValid = false;
+                $errorCode = UPLOAD_ERR_NO_FILE;
+                
+                try {
+                    $isValid = $file->isValid();
+                    $errorCode = $file->getError();
+                } catch (\Exception $e) {
+                    Log::warning('[AdminEventController] store - error checking file validity', [
+                        'user_id' => auth()->id(),
+                        'error' => $e->getMessage(),
+                    ]);
+                    $isValid = false;
+                    $errorCode = UPLOAD_ERR_NO_FILE;
+                }
+                
+                Log::debug('[AdminEventController] store - file object exists', [
+                    'user_id' => auth()->id(),
+                    'is_valid' => $isValid,
+                    'error_code' => $errorCode,
+                    'error_message' => $errorCode !== UPLOAD_ERR_OK ? $this->getUploadErrorMessage($errorCode) : 'OK',
+                    'has_file_check' => $request->hasFile('thumbnail'),
+                ]);
+                
+                // Only access file properties if file is valid
+                if ($isValid) {
+                    try {
+                        $fileSize = $file->getSize();
+                        $fileName = $file->getClientOriginalName();
+                        $fileExtension = $file->getClientOriginalExtension();
+                        
+                        // Try to get MIME type, but don't fail if fileinfo extension is missing
+                        $fileMimeType = 'unknown';
+                        try {
+                            $fileMimeType = $file->getMimeType();
+                        } catch (\Exception $e) {
+                            // fileinfo extension not available - use extension-based guess
+                            $mimeTypes = [
+                                'jpg' => 'image/jpeg',
+                                'jpeg' => 'image/jpeg',
+                                'png' => 'image/png',
+                                'webp' => 'image/webp',
+                            ];
+                            $fileMimeType = $mimeTypes[strtolower($fileExtension)] ?? 'application/octet-stream';
+                        }
+                        
+                        Log::debug('[AdminEventController] store - file details', [
+                            'user_id' => auth()->id(),
+                            'file_name' => $fileName,
+                            'file_size' => $fileSize,
+                            'file_mime_type' => $fileMimeType,
+                            'file_extension' => $fileExtension,
+                        ]);
+                        
+                        // Check if file has content
+                        if ($fileSize > 0) {
+                            $hasValidFile = true;
+                            Log::debug('[AdminEventController] store - file is valid and has content', [
+                                'user_id' => auth()->id(),
+                                'file_size' => $fileSize,
+                            ]);
+                        } else {
+                            Log::warning('[AdminEventController] store - file is valid but empty', [
+                                'user_id' => auth()->id(),
+                                'file_size' => $fileSize,
+                            ]);
+                        }
+                    } catch (\Exception $e) {
+                        Log::error('[AdminEventController] store - error accessing file properties', [
+                            'user_id' => auth()->id(),
+                            'error' => $e->getMessage(),
+                            'error_code' => $errorCode,
+                        ]);
+                    }
+                } else {
+                    Log::warning('[AdminEventController] store - file is invalid', [
+                        'user_id' => auth()->id(),
+                        'error_code' => $errorCode,
+                        'error_message' => $this->getUploadErrorMessage($errorCode),
+                    ]);
+                }
+            } else {
+                Log::debug('[AdminEventController] store - no file object in request', [
+                    'user_id' => auth()->id(),
+                    'all_files_count' => count($request->allFiles()),
+                    'files_present' => array_keys($request->allFiles()),
+                    'has_file_check' => $request->hasFile('thumbnail'),
+                ]);
+            }
+
+            // Handle checkbox - convert to boolean before validation
+            // Checkboxes send "1" when checked, or nothing when unchecked
+            $isActive = $request->has('is_active') && $request->input('is_active');
+            $request->merge(['is_active' => (bool) $isActive]);
+            
+            Log::debug('[AdminEventController] store - checkbox value processed', [
+                'user_id' => auth()->id(),
+                'is_active_raw' => $request->has('is_active') ? $request->input('is_active') : 'not present',
+                'is_active_boolean' => $isActive,
             ]);
 
             $validationRules = [
@@ -24,16 +133,11 @@ class AdminEventController extends Controller
                 'location' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z0-9\s\-]+$/'],
                 'start_date' => ['required', 'date'],
                 'end_date' => ['required', 'date', 'after_or_equal:start_date'],
-                'is_active' => ['sometimes', 'boolean'],
+                'is_active' => ['required', 'boolean'],
             ];
-            
-            // Handle checkbox - if not present, set to false
-            if (!$request->has('is_active')) {
-                $request->merge(['is_active' => false]);
-            }
 
             // Add thumbnail validation only if uploading new image
-            if ($request->hasFile('thumbnail')) {
+            if ($hasValidFile) {
                 $validationRules['thumbnail'] = ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120']; // 5MB max
             }
 
@@ -46,32 +150,61 @@ class AdminEventController extends Controller
 
             // Handle thumbnail upload
             $thumbnailPath = null;
-            if ($request->hasFile('thumbnail')) {
-                $file = $request->file('thumbnail');
+            if ($hasValidFile && $file) {
+                // Get file info safely (avoid fileinfo extension requirement)
+                $fileName = $file->getClientOriginalName();
+                $fileSize = $file->getSize();
+                $fileExtension = $file->getClientOriginalExtension();
+                
                 Log::debug('[AdminEventController] store - processing thumbnail upload', [
                     'user_id' => auth()->id(),
-                    'file_name' => $file->getClientOriginalName(),
-                    'file_size' => $file->getSize(),
-                    'file_mime_type' => $file->getMimeType(),
+                    'file_name' => $fileName,
+                    'file_size' => $fileSize,
+                    'file_extension' => $fileExtension,
                 ]);
 
-                // Delete old thumbnail if updating
+                // Delete old thumbnail if updating (using direct file operations to avoid fileinfo dependency)
                 if ($request->has('event_id')) {
                     $event = Event::find($request->input('event_id'));
                     if ($event && $event->thumbnail_path) {
-                        Storage::disk('public')->delete($event->thumbnail_path);
-                        Log::debug('[AdminEventController] store - old thumbnail deleted', [
-                            'user_id' => auth()->id(),
-                            'old_path' => $event->thumbnail_path,
-                        ]);
+                        $oldFilePath = storage_path('app/public/' . $event->thumbnail_path);
+                        if (file_exists($oldFilePath)) {
+                            unlink($oldFilePath);
+                            Log::debug('[AdminEventController] store - old thumbnail deleted', [
+                                'user_id' => auth()->id(),
+                                'old_path' => $event->thumbnail_path,
+                                'full_path' => $oldFilePath,
+                            ]);
+                        } else {
+                            Log::warning('[AdminEventController] store - old thumbnail file not found', [
+                                'user_id' => auth()->id(),
+                                'old_path' => $event->thumbnail_path,
+                                'full_path' => $oldFilePath,
+                            ]);
+                        }
                     }
                 }
 
                 // Store new thumbnail
-                $thumbnailPath = $file->store('events', 'public');
+                // Use move() instead of store() to avoid fileinfo extension requirement
+                // Generate a unique filename to prevent conflicts
+                $extension = $file->getClientOriginalExtension() ?: 'jpg';
+                $filename = uniqid('event_', true) . '.' . $extension;
+                $destinationPath = storage_path('app/public/events');
+                
+                // Ensure directory exists
+                if (!is_dir($destinationPath)) {
+                    mkdir($destinationPath, 0755, true);
+                }
+                
+                // Move file manually to avoid fileinfo dependency
+                $file->move($destinationPath, $filename);
+                $thumbnailPath = 'events/' . $filename;
+                
                 Log::debug('[AdminEventController] store - thumbnail uploaded', [
                     'user_id' => auth()->id(),
                     'thumbnail_path' => $thumbnailPath,
+                    'full_path' => $destinationPath . '/' . $filename,
                 ]);
             }
 
@@ -145,6 +278,25 @@ class AdminEventController extends Controller
             ]);
             return redirect()->back()->with('error', 'An error occurred: ' . $e->getMessage())->withInput();
         }
+    }
+    
+    /**
+     * Get human-readable upload error message
+     */
+    private function getUploadErrorMessage(int $errorCode): string
+    {
+        $errors = [
+            UPLOAD_ERR_OK => 'No error',
+            UPLOAD_ERR_INI_SIZE => 'File exceeds upload_max_filesize directive',
+            UPLOAD_ERR_FORM_SIZE => 'File exceeds MAX_FILE_SIZE directive',
+            UPLOAD_ERR_PARTIAL => 'File was only partially uploaded',
+            UPLOAD_ERR_NO_FILE => 'No file was uploaded',
+            UPLOAD_ERR_NO_TMP_DIR => 'Missing temporary folder',
+            UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk',
+            UPLOAD_ERR_EXTENSION => 'File upload stopped by extension',
+        ];
+        
+        return $errors[$errorCode] ?? 'Unknown error';
     }
 }
 
