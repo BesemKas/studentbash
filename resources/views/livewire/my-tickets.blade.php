@@ -117,34 +117,6 @@ new class extends Component {
         }
     }
 
-    /**
-     * Get SnapScan payment URL
-     */
-    public function getSnapscanUrlProperty(): string
-    {
-        try {
-            Log::debug('[MyTickets] getSnapscanUrlProperty started', [
-                'user_id' => auth()->id(),
-                'timestamp' => now()->toIso8601String(),
-            ]);
-
-            $envUrl = env('SNAPSCAN_PAYMENT_URL');
-            $url = $envUrl ?: 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ';
-
-            Log::debug('[MyTickets] getSnapscanUrlProperty completed', [
-                'user_id' => auth()->id(),
-                'url_from_env' => $envUrl !== null,
-            ]);
-
-            return $url;
-        } catch (\Exception $e) {
-            Log::error('[MyTickets] getSnapscanUrlProperty failed', [
-                'user_id' => auth()->id(),
-                'error' => $e->getMessage(),
-            ]);
-            return 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ';
-        }
-    }
 }; ?>
 
 <section class="w-full space-y-4">
@@ -168,25 +140,11 @@ new class extends Component {
                     <flux:heading size="md" class="text-blue-700 dark:text-blue-400 mb-1">How to Pay for Your
                         Tickets</flux:heading>
                     <flux:text class="text-sm text-blue-900 dark:text-blue-300 mb-3">
-                        You have tickets pending payment verification. <strong>Use your ticket's Payment Reference in
-                            both payment methods.</strong>
+                        You have tickets pending payment verification. <strong>Use your ticket's Payment Reference when making your payment.</strong>
                     </flux:text>
 
                     <!-- Payment Options -->
-                    <div class="grid gap-3 sm:grid-cols-2 mb-3">
-                        <div
-                            class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-blue-200 dark:border-blue-700">
-                            <flux:text class="text-xs font-semibold text-blue-900 dark:text-blue-300 mb-2 block">
-                                SnapScan</flux:text>
-                            <flux:link href="{{ $this->snapscanUrl }}" variant="primary"
-                                class="inline-flex items-center gap-1.5 mb-2 text-sm">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                                Open SnapScan
-                            </flux:link>
-                        </div>
+                    <div class="mb-3">
                         <div
                             class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-blue-200 dark:border-blue-700">
                             <flux:text class="text-xs font-semibold text-blue-900 dark:text-blue-300 mb-2 block">Instant
@@ -388,7 +346,7 @@ new class extends Component {
                                         <flux:text class="text-xs text-yellow-800 dark:text-yellow-300">
                                             Complete payment using reference <strong
                                                 class="font-mono font-bold">{{ $ticket->payment_ref }}</strong> via
-                                            SnapScan or Instant EFT.
+                                            Instant EFT.
                                         </flux:text>
                                     </div>
                                 </div>

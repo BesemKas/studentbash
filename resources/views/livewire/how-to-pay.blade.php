@@ -4,38 +4,6 @@ use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 
 new class extends Component {
-    /**
-     * Get SnapScan payment URL
-     */
-    public function getSnapscanUrlProperty(): string
-    {
-        try {
-            Log::debug('[HowToPay] getSnapscanUrlProperty started', [
-                'user_id' => auth()->id(),
-                'timestamp' => now()->toIso8601String(),
-            ]);
-
-            $envUrl = env('SNAPSCAN_PAYMENT_URL');
-            $url = $envUrl ?: 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ';
-
-            Log::debug('[HowToPay] getSnapscanUrlProperty completed successfully', [
-                'user_id' => auth()->id(),
-                'url_from_env' => $envUrl !== null,
-                'url_length' => strlen($url),
-            ]);
-
-            return $url;
-        } catch (\Exception $e) {
-            Log::error('[HowToPay] getSnapscanUrlProperty failed', [
-                'user_id' => auth()->id(),
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-            ]);
-            return 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ';
-        }
-    }
 }; ?>
 
 <section class="w-full space-y-6">
@@ -55,7 +23,7 @@ new class extends Component {
             <div class="flex-1">
                 <flux:heading size="lg" class="text-blue-700 dark:text-blue-400 mb-2">Payment Process</flux:heading>
                 <flux:text class="text-blue-900 dark:text-blue-300 mb-4">
-                    After creating a ticket, you'll receive a unique <strong>Payment Reference</strong>. Use this reference when making your payment through either SnapScan or Bank Transfer. Your ticket will remain inactive until payment is verified by an administrator.
+                    After creating a ticket, you'll receive a unique <strong>Payment Reference</strong>. Use this reference when making your payment via Bank Transfer. Your ticket will remain inactive until payment is verified by an administrator.
                 </flux:text>
             </div>
         </div>
@@ -105,7 +73,7 @@ new class extends Component {
                     <div class="flex-1">
                         <flux:heading size="md" class="mb-2">Make Your Payment</flux:heading>
                         <flux:text class="text-neutral-600 dark:text-neutral-400 mb-3">
-                            Choose one of the payment methods below and complete your payment using your Payment Reference.
+                            Complete your payment using the payment method below and your Payment Reference.
                         </flux:text>
                     </div>
                 </div>
@@ -130,40 +98,11 @@ new class extends Component {
 
     <!-- Payment Methods Section -->
     <div class="space-y-6">
-        <flux:heading size="lg">Payment Methods</flux:heading>
-
-        <!-- SnapScan Payment -->
-        <div class="p-6 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700 space-y-4">
-            <flux:heading size="md" class="text-green-700 dark:text-green-400">Option 1: Pay with SnapScan</flux:heading>
-            
-            <div class="p-4 bg-white dark:bg-neutral-800 rounded-lg border border-green-200 dark:border-green-700">
-                <flux:text class="text-sm font-semibold text-green-900 dark:text-green-300 mb-3 block">Quick and Easy Payment</flux:text>
-                <flux:link 
-                    href="{{ $this->snapscanUrl }}" 
-                    variant="primary"
-                    class="inline-flex items-center gap-2 mb-3"
-                    target="_blank"
-                >
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    Open SnapScan Payment
-                </flux:link>
-                <div class="space-y-2 text-sm text-green-900 dark:text-green-200">
-                    <p><strong>Instructions:</strong></p>
-                    <ol class="list-decimal list-inside space-y-1 ml-2">
-                        <li>Click the "Open SnapScan Payment" button above</li>
-                        <li>Enter the amount for your ticket (check ticket type pricing)</li>
-                        <li>Enter your <strong>Payment Reference</strong> in the reference/note field</li>
-                        <li>Complete the payment using your SnapScan app or card</li>
-                    </ol>
-                </div>
-            </div>
-        </div>
+        <flux:heading size="lg">Payment Method</flux:heading>
 
         <!-- Bank Transfer -->
         <div class="p-6 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-700 space-y-4">
-            <flux:heading size="md" class="text-blue-700 dark:text-blue-400">Option 2: Pay via Bank Transfer</flux:heading>
+            <flux:heading size="md" class="text-blue-700 dark:text-blue-400">Pay via Bank Transfer</flux:heading>
             
             <div class="p-4 bg-white dark:bg-neutral-800 rounded-lg border border-blue-200 dark:border-blue-700">
                 <flux:text class="text-sm font-semibold text-blue-900 dark:text-blue-300 mb-3 block">Traditional Bank Transfer</flux:text>

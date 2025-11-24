@@ -52,6 +52,12 @@ Volt::route('admin/events', 'admin-events')
     ->middleware('role:admin')
     ->name('admin.events');
 
+// Admin events store route (admin role only) - handles form submission with files
+Route::post('admin/events', [App\Http\Controllers\AdminEventController::class, 'store'])
+    ->middleware(['auth'])
+    ->middleware('role:admin')
+    ->name('admin.events.store');
+
 // Admin event ticket types route (admin role only)
 Volt::route('admin/events/{event}/ticket-types', 'admin-event-ticket-types')
     ->middleware(['auth'])

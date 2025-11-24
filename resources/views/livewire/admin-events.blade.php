@@ -539,19 +539,26 @@ new class extends Component {
             <flux:heading size="lg">{{ $editingEvent ? 'Edit Event' : 'Create New Event' }}</flux:heading>
 
             <form 
-                wire:submit="saveEvent"
+                method="POST"
+                action="{{ route('admin.events.store') }}"
                 class="space-y-4" 
                 enctype="multipart/form-data"
             >
+                @csrf
+                @if($editingEvent)
+                    <input type="hidden" name="event_id" value="{{ $editingEvent->id }}">
+                @endif
                 <flux:input
-                    wire:model="name"
+                    name="name"
+                    value="{{ old('name', $name) }}"
                     label="Event Name"
                     placeholder="e.g., December 2024 Event"
                     required
                 />
 
                 <flux:input
-                    wire:model="location"
+                    name="location"
+                    value="{{ old('location', $location) }}"
                     label="Location"
                     placeholder="e.g., Cape Town Convention Centre"
                     required
@@ -559,22 +566,25 @@ new class extends Component {
 
                 <div class="grid grid-cols-2 gap-4">
                     <flux:input
-                        wire:model="start_date"
+                        name="start_date"
                         type="date"
+                        value="{{ old('start_date', $start_date) }}"
                         label="Start Date"
                         required
                     />
 
                     <flux:input
-                        wire:model="end_date"
+                        name="end_date"
                         type="date"
+                        value="{{ old('end_date', $end_date) }}"
                         label="End Date"
                         required
                     />
                 </div>
 
                 <flux:checkbox
-                    wire:model="is_active"
+                    name="is_active"
+                    :checked="old('is_active', $is_active)"
                     label="Active"
                     description="Active events can be used for ticket generation"
                 />
@@ -640,32 +650,6 @@ new class extends Component {
                 </div>
             </form>
 
-            <script>
-                // Simple script to ensure Livewire is ready before form submission
-                (function() {
-                    const form = document.querySelector('form[wire\\:submit="saveEvent"]');
-                    if (!form) return;
-                    
-                    // Wait for Livewire to be initialized
-                    function waitForLivewire(callback) {
-                        if (typeof window.Livewire !== 'undefined' && window.Livewire.all().length > 0) {
-                            callback();
-                        } else {
-                            setTimeout(() => waitForLivewire(callback), 50);
-                        }
-                    }
-                    
-                    // Intercept form submission to ensure Livewire is ready
-                    form.addEventListener('submit', function(e) {
-                        if (typeof window.Livewire === 'undefined' || window.Livewire.all().length === 0) {
-                            e.preventDefault();
-                            waitForLivewire(function() {
-                                form.requestSubmit();
-                            });
-                        }
-                    });
-                })();
-            </script>
         </div>
     @endif
 
