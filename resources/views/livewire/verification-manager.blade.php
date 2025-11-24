@@ -19,6 +19,7 @@ new class extends Component {
 
     /**
      * Sanitize input to only allow letters, digits, and hyphens
+     * Used for payment references and other ID-like fields
      */
     private function sanitizeInput(?string $value): ?string
     {
@@ -50,6 +51,52 @@ new class extends Component {
         ]);
 
         return $result;
+    }
+
+    /**
+     * Automatically sanitize searchPaymentRef when it's updated via wire:model
+     * This prevents malicious input from breaking Livewire updates
+     */
+    public function updatedSearchPaymentRef($value): void
+    {
+        try {
+            Log::debug('[VerificationManager] updatedSearchPaymentRef called', [
+                'user_id' => auth()->id(),
+                'raw_value' => $value,
+                'value_type' => gettype($value),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Convert to string and trim
+            $inputValue = is_string($value) ? trim($value) : (string) $value;
+            
+            // Sanitize the input immediately
+            $sanitized = $this->sanitizeInput($inputValue);
+            $sanitizedString = $sanitized ?? '';
+            
+            // Only update if the sanitized value differs from what was passed in
+            // This prevents infinite loops while ensuring malicious input is removed
+            if ($sanitizedString !== $inputValue) {
+                $this->searchPaymentRef = $sanitizedString;
+                Log::info('[VerificationManager] updatedSearchPaymentRef - input sanitized', [
+                    'user_id' => auth()->id(),
+                    'original_value' => $inputValue,
+                    'sanitized_value' => $sanitizedString,
+                    'characters_removed' => strlen($inputValue) - strlen($sanitizedString),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('[VerificationManager] updatedSearchPaymentRef failed', [
+                'user_id' => auth()->id(),
+                'value' => $value,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            // On error, clear the input to prevent issues
+            $this->searchPaymentRef = '';
+        }
     }
 
     /**
@@ -478,6 +525,7 @@ new class extends Component {
                 type="text"
                 placeholder="Enter payment reference (e.g., P-KL-8592)"
                 class="flex-1"
+                id="payment-ref-search-input"
             />
             <div class="flex items-end">
                 <flux:button wire:click="searchPaymentRef" variant="primary">
@@ -700,4 +748,85 @@ new class extends Component {
         </div>
     </div>
 </section>
+
+<script>
+    /**
+     * Initialize input sanitization for payment reference search
+     * Sanitizes to only allow letters, digits, and hyphens (strict alphanumeric + hyphen)
+     */
+    (function() {
+        function initInputSanitization() {
+            const input = document.getElementById('payment-ref-search-input') || 
+                         document.querySelector('input[wire\\:model="searchPaymentRef"]') ||
+                         document.querySelector('input[wire\\:model*="searchPaymentRef"]');
+            
+            if (!input) {
+                setTimeout(initInputSanitization, 100);
+                return;
+            }
+
+            if (input.dataset.sanitized === 'true') {
+                return;
+            }
+            input.dataset.sanitized = 'true';
+
+            // Keypress handler - prevent invalid characters
+            input.addEventListener('keypress', function(event) {
+                if (event.key && event.key.length === 1) {
+                    const allowed = /[a-zA-Z0-9\-]/.test(event.key);
+                    if (!allowed) {
+                        event.preventDefault();
+                        return false;
+                    }
+                }
+                return true;
+            }, true);
+
+            // Paste handler - sanitize pasted content
+            input.addEventListener('paste', function(event) {
+                event.preventDefault();
+                const paste = (event.clipboardData || window.clipboardData).getData('text');
+                const sanitized = paste.replace(/[^a-zA-Z0-9\-]/g, '');
+                
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                const currentValue = this.value;
+                
+                const newValue = currentValue.substring(0, start) + sanitized + currentValue.substring(end);
+                this.value = newValue;
+                
+                const newPosition = start + sanitized.length;
+                this.setSelectionRange(newPosition, newPosition);
+                
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+            }, true);
+
+            // Input handler - catch any characters that slip through
+            input.addEventListener('input', function(event) {
+                const originalValue = this.value;
+                const sanitized = originalValue.replace(/[^a-zA-Z0-9\-]/g, '');
+                
+                if (sanitized !== originalValue) {
+                    const cursorPosition = this.selectionStart;
+                    this.value = sanitized;
+                    
+                    const removedChars = originalValue.length - sanitized.length;
+                    const newPosition = Math.max(0, cursorPosition - removedChars);
+                    this.setSelectionRange(newPosition, newPosition);
+                }
+            }, true);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initInputSanitization);
+        } else {
+            initInputSanitization();
+        }
+
+        document.addEventListener('livewire:init', initInputSanitization);
+        document.addEventListener('livewire:update', function() {
+            setTimeout(initInputSanitization, 50);
+        });
+    })();
+</script>
 

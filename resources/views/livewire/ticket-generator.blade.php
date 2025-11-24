@@ -28,6 +28,7 @@ new class extends Component {
 
     /**
      * Sanitize input to only allow letters, digits, and hyphens
+     * Used for payment references and QR codes
      */
     private function sanitizeInput(?string $value): ?string
     {
@@ -51,6 +52,43 @@ new class extends Component {
         $result = $sanitized === '' ? null : $sanitized;
 
         Log::debug('[TicketGenerator] sanitizeInput completed', [
+            'user_id' => auth()->id(),
+            'original_length' => $originalLength,
+            'sanitized_length' => $sanitizedLength,
+            'characters_removed' => $originalLength - $sanitizedLength,
+            'result' => $result,
+        ]);
+
+        return $result;
+    }
+
+    /**
+     * Sanitize name input to allow letters, digits, spaces, hyphens, apostrophes, and periods
+     * Used for person names like "John O'Brien" or "Mary-Jane Smith"
+     */
+    private function sanitizeName(?string $value): ?string
+    {
+        Log::debug('[TicketGenerator] sanitizeName called', [
+            'user_id' => auth()->id(),
+            'input_value' => $value,
+            'input_length' => $value ? strlen($value) : 0,
+            'timestamp' => now()->toIso8601String(),
+        ]);
+
+        if (empty($value)) {
+            Log::debug('[TicketGenerator] sanitizeName - empty value, returning null', [
+                'user_id' => auth()->id(),
+            ]);
+            return null;
+        }
+
+        $originalLength = strlen($value);
+        // Allow letters, digits, spaces, hyphens, apostrophes, and periods
+        $sanitized = preg_replace('/[^a-zA-Z0-9\s\'\-.]/', '', $value);
+        $sanitizedLength = strlen($sanitized);
+        $result = trim($sanitized) === '' ? null : trim($sanitized);
+
+        Log::debug('[TicketGenerator] sanitizeName completed', [
             'user_id' => auth()->id(),
             'original_length' => $originalLength,
             'sanitized_length' => $sanitizedLength,
@@ -103,6 +141,51 @@ new class extends Component {
     }
 
     /**
+     * Automatically sanitize holderName when it's updated via wire:model
+     * This prevents malicious input from breaking Livewire updates
+     */
+    public function updatedHolderName($value): void
+    {
+        try {
+            Log::debug('[TicketGenerator] updatedHolderName called', [
+                'user_id' => auth()->id(),
+                'raw_value' => $value,
+                'value_type' => gettype($value),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Convert to string and trim
+            $inputValue = is_string($value) ? trim($value) : (string) $value;
+            
+            // Sanitize the input immediately using name sanitization
+            $sanitized = $this->sanitizeName($inputValue);
+            $sanitizedString = $sanitized ?? '';
+            
+            // Only update if the sanitized value differs from what was passed in
+            if ($sanitizedString !== $inputValue) {
+                $this->holderName = $sanitizedString;
+                Log::info('[TicketGenerator] updatedHolderName - input sanitized', [
+                    'user_id' => auth()->id(),
+                    'original_value' => $inputValue,
+                    'sanitized_value' => $sanitizedString,
+                    'characters_removed' => strlen($inputValue) - strlen($sanitizedString),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('[TicketGenerator] updatedHolderName failed', [
+                'user_id' => auth()->id(),
+                'value' => $value,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            // On error, clear the input to prevent issues
+            $this->holderName = '';
+        }
+    }
+
+    /**
      * Update QR code text when relevant fields change.
      */
     public function updated($propertyName): void
@@ -113,19 +196,6 @@ new class extends Component {
                 'property_name' => $propertyName,
                 'timestamp' => now()->toIso8601String(),
             ]);
-
-            // Sanitize holderName when it's updated
-            if ($propertyName === 'holderName') {
-                $originalValue = $this->holderName;
-                $this->holderName = $this->sanitizeInput($this->holderName) ?? '';
-                if ($originalValue !== $this->holderName) {
-                    Log::debug('[TicketGenerator] updated - holderName sanitized', [
-                        'user_id' => auth()->id(),
-                        'original' => $originalValue,
-                        'sanitized' => $this->holderName,
-                    ]);
-                }
-            }
             
             // Reset ticket type and clear QR code when event changes
             if ($propertyName === 'eventId') {
@@ -945,6 +1015,7 @@ new class extends Component {
                     required
                     autofocus
                     placeholder="John Michael Doe"
+                    id="holder-name-input"
                 />
 
                 <flux:input
@@ -1070,4 +1141,88 @@ new class extends Component {
         </div>
     </div>
 </section>
+
+<script>
+    /**
+     * Initialize input sanitization for holder name
+     * Sanitizes to allow letters, digits, spaces, hyphens, apostrophes, and periods (name format)
+     */
+    (function() {
+        function initInputSanitization() {
+            const input = document.getElementById('holder-name-input') || 
+                         document.querySelector('input[wire\\:model="holderName"]') ||
+                         document.querySelector('input[wire\\:model*="holderName"]');
+            
+            if (!input) {
+                setTimeout(initInputSanitization, 100);
+                return;
+            }
+
+            if (input.dataset.sanitized === 'true') {
+                return;
+            }
+            input.dataset.sanitized = 'true';
+
+            // Keypress handler - prevent invalid characters
+            input.addEventListener('keypress', function(event) {
+                if (event.key && event.key.length === 1) {
+                    // Allow letters, digits, spaces, hyphens, apostrophes, and periods
+                    const allowed = /[a-zA-Z0-9\s'\-.]/.test(event.key);
+                    if (!allowed) {
+                        event.preventDefault();
+                        return false;
+                    }
+                }
+                return true;
+            }, true);
+
+            // Paste handler - sanitize pasted content
+            input.addEventListener('paste', function(event) {
+                event.preventDefault();
+                const paste = (event.clipboardData || window.clipboardData).getData('text');
+                // Allow letters, digits, spaces, hyphens, apostrophes, and periods
+                const sanitized = paste.replace(/[^a-zA-Z0-9\s'\-.]/g, '');
+                
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                const currentValue = this.value;
+                
+                const newValue = currentValue.substring(0, start) + sanitized + currentValue.substring(end);
+                this.value = newValue;
+                
+                const newPosition = start + sanitized.length;
+                this.setSelectionRange(newPosition, newPosition);
+                
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+            }, true);
+
+            // Input handler - catch any characters that slip through
+            input.addEventListener('input', function(event) {
+                const originalValue = this.value;
+                // Allow letters, digits, spaces, hyphens, apostrophes, and periods
+                const sanitized = originalValue.replace(/[^a-zA-Z0-9\s'\-.]/g, '');
+                
+                if (sanitized !== originalValue) {
+                    const cursorPosition = this.selectionStart;
+                    this.value = sanitized;
+                    
+                    const removedChars = originalValue.length - sanitized.length;
+                    const newPosition = Math.max(0, cursorPosition - removedChars);
+                    this.setSelectionRange(newPosition, newPosition);
+                }
+            }, true);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initInputSanitization);
+        } else {
+            initInputSanitization();
+        }
+
+        document.addEventListener('livewire:init', initInputSanitization);
+        document.addEventListener('livewire:update', function() {
+            setTimeout(initInputSanitization, 50);
+        });
+    })();
+</script>
 

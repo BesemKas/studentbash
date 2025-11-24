@@ -52,6 +52,52 @@ new class extends Component {
     }
 
     /**
+     * Automatically sanitize searchId when it's updated via wire:model
+     * This prevents malicious input from breaking Livewire updates
+     */
+    public function updatedSearchId($value): void
+    {
+        try {
+            Log::debug('[ScannerValidator] updatedSearchId called', [
+                'user_id' => auth()->id(),
+                'raw_value' => $value,
+                'value_type' => gettype($value),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            // Convert to string and trim
+            $inputValue = is_string($value) ? trim($value) : (string) $value;
+            
+            // Sanitize the input immediately
+            $sanitized = $this->sanitizeInput($inputValue);
+            $sanitizedString = $sanitized ?? '';
+            
+            // Only update if the sanitized value differs from what was passed in
+            // This prevents infinite loops while ensuring malicious input is removed
+            if ($sanitizedString !== $inputValue) {
+                $this->searchId = $sanitizedString;
+                Log::info('[ScannerValidator] updatedSearchId - input sanitized', [
+                    'user_id' => auth()->id(),
+                    'original_value' => $inputValue,
+                    'sanitized_value' => $sanitizedString,
+                    'characters_removed' => strlen($inputValue) - strlen($sanitizedString),
+                ]);
+            }
+        } catch (\Exception $e) {
+            Log::error('[ScannerValidator] updatedSearchId failed', [
+                'user_id' => auth()->id(),
+                'value' => $value,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            // On error, clear the input to prevent issues
+            $this->searchId = '';
+        }
+    }
+
+    /**
      * Search for ticket by QR code text.
      */
     public function searchTicket(): void
@@ -726,6 +772,7 @@ new class extends Component {
                 placeholder="Scan or enter ticket ID"
                 class="text-lg"
                 autofocus
+                id="ticket-search-input"
             />
 
             <div class="flex gap-4">
@@ -1021,6 +1068,97 @@ new class extends Component {
 <script src="https://unpkg.com/html5-qrcode@latest/html5-qrcode.min.js"></script>
 
 <script>
+    /**
+     * Initialize input sanitization after DOM is ready
+     * This ensures it works with Flux components that may render inputs dynamically
+     */
+    (function() {
+        function initInputSanitization() {
+            // Find the input element (Flux may wrap it, so we search by ID or wire:model)
+            const input = document.getElementById('ticket-search-input') || 
+                         document.querySelector('input[wire\\:model="searchId"]') ||
+                         document.querySelector('input[wire\\:model*="searchId"]');
+            
+            if (!input) {
+                // Retry after a short delay if input not found yet
+                setTimeout(initInputSanitization, 100);
+                return;
+            }
+
+            // Check if handlers are already attached
+            if (input.dataset.sanitized === 'true') {
+                return;
+            }
+            input.dataset.sanitized = 'true';
+
+            // Add sanitization handlers
+            input.addEventListener('keypress', function(event) {
+                // Allow control keys (backspace, delete, arrows, tab, etc.)
+                if (event.key && event.key.length === 1) {
+                    // Only allow alphanumeric and hyphen
+                    const allowed = /[a-zA-Z0-9\-]/.test(event.key);
+                    if (!allowed) {
+                        event.preventDefault();
+                        return false;
+                    }
+                }
+                return true;
+            }, true); // Use capture phase
+
+            input.addEventListener('paste', function(event) {
+                event.preventDefault();
+                const paste = (event.clipboardData || window.clipboardData).getData('text');
+                const sanitized = paste.replace(/[^a-zA-Z0-9\-]/g, '');
+                
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                const currentValue = this.value;
+                
+                // Insert sanitized content
+                const newValue = currentValue.substring(0, start) + sanitized + currentValue.substring(end);
+                this.value = newValue;
+                
+                // Set cursor position after pasted content
+                const newPosition = start + sanitized.length;
+                this.setSelectionRange(newPosition, newPosition);
+                
+                // Trigger input event for Livewire
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+            }, true); // Use capture phase
+
+            input.addEventListener('input', function(event) {
+                const originalValue = this.value;
+                
+                // Remove all characters except letters, digits, and hyphens
+                const sanitized = originalValue.replace(/[^a-zA-Z0-9\-]/g, '');
+                
+                // Only update if the value changed
+                if (sanitized !== originalValue) {
+                    const cursorPosition = this.selectionStart;
+                    this.value = sanitized;
+                    
+                    // Restore cursor position (adjust for removed characters)
+                    const removedChars = originalValue.length - sanitized.length;
+                    const newPosition = Math.max(0, cursorPosition - removedChars);
+                    this.setSelectionRange(newPosition, newPosition);
+                }
+            }, true); // Use capture phase to run before Livewire
+        }
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initInputSanitization);
+        } else {
+            initInputSanitization();
+        }
+
+        // Re-initialize after Livewire updates (for dynamic components)
+        document.addEventListener('livewire:init', initInputSanitization);
+        document.addEventListener('livewire:update', function() {
+            setTimeout(initInputSanitization, 50);
+        });
+    })();
+
     let html5QrcodeScanner = null;
     let isScanning = false;
 

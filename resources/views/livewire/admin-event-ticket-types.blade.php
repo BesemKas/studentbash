@@ -20,6 +20,7 @@ new class extends Component {
 
     /**
      * Sanitize input to only allow letters, digits, and hyphens
+     * Used for payment references and QR codes
      */
     private function sanitizeInput(?string $value): ?string
     {
@@ -54,6 +55,153 @@ new class extends Component {
         ]);
 
         return $result;
+    }
+
+    /**
+     * Sanitize name input to allow letters, digits, spaces, hyphens, apostrophes, and periods
+     * Used for ticket type names
+     */
+    private function sanitizeName(?string $value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        $originalLength = strlen($value);
+        // Allow letters, digits, spaces, hyphens, apostrophes, and periods
+        $sanitized = preg_replace('/[^a-zA-Z0-9\s\'\-.]/', '', $value);
+        $result = trim($sanitized) === '' ? null : trim($sanitized);
+
+        if ($result !== $value) {
+            Log::info('[AdminEventTicketTypes] sanitizeName - input sanitized', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'original_length' => $originalLength,
+                'sanitized_length' => strlen($sanitized),
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Sanitize text field input to allow letters, digits, spaces, and common punctuation
+     * Used for descriptions
+     */
+    private function sanitizeText(?string $value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        $originalLength = strlen($value);
+        // Allow letters, digits, spaces, common punctuation (.,!?;:), hyphens, apostrophes
+        $sanitized = preg_replace('/[^a-zA-Z0-9\s.,!?;:\'\-]/', '', $value);
+        $result = trim($sanitized) === '' ? null : trim($sanitized);
+
+        if ($result !== $value) {
+            Log::info('[AdminEventTicketTypes] sanitizeText - input sanitized', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'original_length' => $originalLength,
+                'sanitized_length' => strlen($sanitized),
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Sanitize color name input to allow letters, spaces, and hyphens
+     * Used for armband colors
+     */
+    private function sanitizeColor(?string $value): ?string
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        $originalLength = strlen($value);
+        // Allow letters, spaces, and hyphens
+        $sanitized = preg_replace('/[^a-zA-Z\s\-]/', '', $value);
+        $result = trim($sanitized) === '' ? null : trim($sanitized);
+
+        if ($result !== $value) {
+            Log::info('[AdminEventTicketTypes] sanitizeColor - input sanitized', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id ?? null,
+                'original_length' => $originalLength,
+                'sanitized_length' => strlen($sanitized),
+            ]);
+        }
+
+        return $result;
+    }
+
+    /**
+     * Automatically sanitize name when it's updated via wire:model
+     */
+    public function updatedName($value): void
+    {
+        try {
+            $inputValue = is_string($value) ? trim($value) : (string) $value;
+            $sanitized = $this->sanitizeName($inputValue);
+            $sanitizedString = $sanitized ?? '';
+            
+            if ($sanitizedString !== $inputValue) {
+                $this->name = $sanitizedString;
+            }
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] updatedName failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+            ]);
+            $this->name = '';
+        }
+    }
+
+    /**
+     * Automatically sanitize description when it's updated via wire:model
+     */
+    public function updatedDescription($value): void
+    {
+        try {
+            $inputValue = is_string($value) ? trim($value) : (string) $value;
+            $sanitized = $this->sanitizeText($inputValue);
+            $sanitizedString = $sanitized ?? '';
+            
+            if ($sanitizedString !== $inputValue) {
+                $this->description = $sanitizedString;
+            }
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] updatedDescription failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+            ]);
+            $this->description = '';
+        }
+    }
+
+    /**
+     * Automatically sanitize armband_color when it's updated via wire:model
+     */
+    public function updatedArmbandColor($value): void
+    {
+        try {
+            $inputValue = is_string($value) ? trim($value) : (string) $value;
+            $sanitized = $this->sanitizeColor($inputValue);
+            $sanitizedString = $sanitized ?? '';
+            
+            if ($sanitizedString !== $inputValue) {
+                $this->armband_color = $sanitizedString;
+            }
+        } catch (\Exception $e) {
+            Log::error('[AdminEventTicketTypes] updatedArmbandColor failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+            ]);
+            $this->armband_color = null;
+        }
     }
 
     /**
@@ -599,6 +747,7 @@ new class extends Component {
                     label="Ticket Type Name"
                     placeholder="e.g., VIP Pass, Full Event Pass, Day 1 Only"
                     required
+                    id="ticket-type-name-input"
                 />
 
                 <flux:textarea
@@ -606,6 +755,7 @@ new class extends Component {
                     label="Description"
                     placeholder="Optional description for this ticket type"
                     rows="3"
+                    id="ticket-type-description-input"
                 />
 
                 <flux:checkbox
@@ -667,6 +817,7 @@ new class extends Component {
                     label="Armband Color"
                     placeholder="e.g., blue, gold, silver, pink, purple, red, green, yellow, orange, teal, indigo, violet"
                     description="Manually set the armband color for this ticket type. Works for all ticket types (full pass, day pass, VIP)."
+                    id="armband-color-input"
                 />
 
                 <flux:input
@@ -774,4 +925,159 @@ new class extends Component {
         @endif
     </div>
 </section>
+
+<script>
+    /**
+     * Initialize input sanitization for ticket type form fields
+     */
+    (function() {
+        function initInputSanitization() {
+            // Name field - allow letters, digits, spaces, hyphens, apostrophes, periods
+            const nameInput = document.getElementById('ticket-type-name-input') || 
+                             document.querySelector('input[wire\\:model="name"]');
+            if (nameInput && nameInput.dataset.sanitized !== 'true') {
+                nameInput.dataset.sanitized = 'true';
+                setupNameSanitization(nameInput);
+            }
+
+            // Description field - allow letters, digits, spaces, common punctuation
+            const descInput = document.getElementById('ticket-type-description-input') || 
+                             document.querySelector('textarea[wire\\:model="description"]');
+            if (descInput && descInput.dataset.sanitized !== 'true') {
+                descInput.dataset.sanitized = 'true';
+                setupTextSanitization(descInput);
+            }
+
+            // Color field - allow letters, spaces, hyphens
+            const colorInput = document.getElementById('armband-color-input') || 
+                              document.querySelector('input[wire\\:model="armband_color"]');
+            if (colorInput && colorInput.dataset.sanitized !== 'true') {
+                colorInput.dataset.sanitized = 'true';
+                setupColorSanitization(colorInput);
+            }
+        }
+
+        function setupNameSanitization(input) {
+            const regex = /[a-zA-Z0-9\s'\-.]/;
+            const replaceRegex = /[^a-zA-Z0-9\s'\-.]/g;
+
+            input.addEventListener('keypress', function(event) {
+                if (event.key && event.key.length === 1 && !regex.test(event.key)) {
+                    event.preventDefault();
+                    return false;
+                }
+                return true;
+            }, true);
+
+            input.addEventListener('paste', function(event) {
+                event.preventDefault();
+                const paste = (event.clipboardData || window.clipboardData).getData('text');
+                const sanitized = paste.replace(replaceRegex, '');
+                
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                const newValue = this.value.substring(0, start) + sanitized + this.value.substring(end);
+                this.value = newValue;
+                this.setSelectionRange(start + sanitized.length, start + sanitized.length);
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+            }, true);
+
+            input.addEventListener('input', function(event) {
+                const originalValue = this.value;
+                const sanitized = originalValue.replace(replaceRegex, '');
+                if (sanitized !== originalValue) {
+                    const cursorPosition = this.selectionStart;
+                    this.value = sanitized;
+                    const newPosition = Math.max(0, cursorPosition - (originalValue.length - sanitized.length));
+                    this.setSelectionRange(newPosition, newPosition);
+                }
+            }, true);
+        }
+
+        function setupTextSanitization(input) {
+            const regex = /[a-zA-Z0-9\s.,!?;:'\-]/;
+            const replaceRegex = /[^a-zA-Z0-9\s.,!?;:'\-]/g;
+
+            input.addEventListener('keypress', function(event) {
+                if (event.key && event.key.length === 1 && !regex.test(event.key)) {
+                    event.preventDefault();
+                    return false;
+                }
+                return true;
+            }, true);
+
+            input.addEventListener('paste', function(event) {
+                event.preventDefault();
+                const paste = (event.clipboardData || window.clipboardData).getData('text');
+                const sanitized = paste.replace(replaceRegex, '');
+                
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                const newValue = this.value.substring(0, start) + sanitized + this.value.substring(end);
+                this.value = newValue;
+                this.setSelectionRange(start + sanitized.length, start + sanitized.length);
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+            }, true);
+
+            input.addEventListener('input', function(event) {
+                const originalValue = this.value;
+                const sanitized = originalValue.replace(replaceRegex, '');
+                if (sanitized !== originalValue) {
+                    const cursorPosition = this.selectionStart;
+                    this.value = sanitized;
+                    const newPosition = Math.max(0, cursorPosition - (originalValue.length - sanitized.length));
+                    this.setSelectionRange(newPosition, newPosition);
+                }
+            }, true);
+        }
+
+        function setupColorSanitization(input) {
+            const regex = /[a-zA-Z\s\-]/;
+            const replaceRegex = /[^a-zA-Z\s\-]/g;
+
+            input.addEventListener('keypress', function(event) {
+                if (event.key && event.key.length === 1 && !regex.test(event.key)) {
+                    event.preventDefault();
+                    return false;
+                }
+                return true;
+            }, true);
+
+            input.addEventListener('paste', function(event) {
+                event.preventDefault();
+                const paste = (event.clipboardData || window.clipboardData).getData('text');
+                const sanitized = paste.replace(replaceRegex, '');
+                
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                const newValue = this.value.substring(0, start) + sanitized + this.value.substring(end);
+                this.value = newValue;
+                this.setSelectionRange(start + sanitized.length, start + sanitized.length);
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+            }, true);
+
+            input.addEventListener('input', function(event) {
+                const originalValue = this.value;
+                const sanitized = originalValue.replace(replaceRegex, '');
+                if (sanitized !== originalValue) {
+                    const cursorPosition = this.selectionStart;
+                    this.value = sanitized;
+                    const newPosition = Math.max(0, cursorPosition - (originalValue.length - sanitized.length));
+                    this.setSelectionRange(newPosition, newPosition);
+                }
+            }, true);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initInputSanitization);
+        } else {
+            initInputSanitization();
+        }
+
+        document.addEventListener('livewire:init', initInputSanitization);
+        document.addEventListener('livewire:update', function() {
+            setTimeout(initInputSanitization, 50);
+        });
+    })();
+</script>
 
