@@ -40,7 +40,7 @@ new class extends Component {
     {
         try {
             $renderer = new ImageRenderer(new RendererStyle(200), new SvgImageBackEnd());
-            return new Writer($renderer)->writeString($qrCodeText);
+            return (new Writer($renderer))->writeString($qrCodeText);
         } catch (\Exception $e) {
             Log::error('[MyTickets] generateQrCodeSvg failed', [
                 'user_id' => auth()->id(),
