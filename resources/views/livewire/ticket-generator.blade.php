@@ -405,7 +405,7 @@ new class extends Component {
     }
 
     /**
-     * Check if selected ticket type is a day pass
+     * Check if selected ticket type is a day pass (VIP can also be day pass)
      */
     public function isDayPassTicketType(): bool
     {
@@ -413,8 +413,8 @@ new class extends Component {
             return false;
         }
 
-        // Day pass: has allowed_dates set (even if empty array) and not VIP
-        return !$this->selectedTicketType->is_vip && ($this->selectedTicketType->allowed_dates !== null);
+        // Day pass: has allowed_dates set (even if empty array) - VIP can also be day pass
+        return $this->selectedTicketType->allowed_dates !== null;
     }
 
     /**
@@ -590,8 +590,8 @@ new class extends Component {
                 return;
             }
 
-            // Validate event date selection for day pass tickets
-            $isDayPass = !$ticketType->is_vip && ($ticketType->allowed_dates !== null);
+            // Validate event date selection for day pass tickets (VIP can also be day pass)
+            $isDayPass = $ticketType->allowed_dates !== null;
             $eventDateId = null;
 
             if ($isDayPass) {

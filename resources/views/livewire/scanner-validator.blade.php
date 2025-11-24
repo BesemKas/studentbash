@@ -318,8 +318,8 @@ new class extends Component {
 
             // Validate ticket date: if ticket has event_date_id (day pass), it must match current date
             if ($this->foundTicket->event_date_id) {
-                // Day pass ticket: must match the specific date
-                if ($this->foundTicket->event_date_id !== $eventDate->id) {
+                // Day pass ticket: must match the specific date (cast to int for type-safe comparison)
+                if ((int) $this->foundTicket->event_date_id !== (int) $eventDate->id) {
                     $ticketEventDate = $this->foundTicket->eventDate;
                     $this->statusMessage = 'DENIED - TICKET NOT VALID FOR TODAY';
                     $this->statusType = 'error';
