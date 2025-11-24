@@ -21,11 +21,34 @@ new class extends Component {
      */
     private function sanitizeInput(?string $value): ?string
     {
+        Log::debug('[ScannerValidator] sanitizeInput called', [
+            'user_id' => auth()->id(),
+            'input_value' => $value,
+            'input_length' => $value ? strlen($value) : 0,
+            'timestamp' => now()->toIso8601String(),
+        ]);
+
         if (empty($value)) {
+            Log::debug('[ScannerValidator] sanitizeInput - empty value, returning null', [
+                'user_id' => auth()->id(),
+            ]);
             return null;
         }
+
+        $originalLength = strlen($value);
         $sanitized = preg_replace('/[^a-zA-Z0-9\-]/', '', $value);
-        return $sanitized === '' ? null : $sanitized;
+        $sanitizedLength = strlen($sanitized);
+        $result = $sanitized === '' ? null : $sanitized;
+
+        Log::debug('[ScannerValidator] sanitizeInput completed', [
+            'user_id' => auth()->id(),
+            'original_length' => $originalLength,
+            'sanitized_length' => $sanitizedLength,
+            'characters_removed' => $originalLength - $sanitizedLength,
+            'result' => $result,
+        ]);
+
+        return $result;
     }
 
     /**

@@ -2,6 +2,7 @@
 
 use App\Livewire\Actions\Logout;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -12,13 +13,56 @@ new class extends Component {
      */
     public function deleteUser(Logout $logout): void
     {
-        $this->validate([
-            'password' => ['required', 'string', 'current_password'],
-        ]);
+        try {
+            Log::info('[SettingsDeleteUser] deleteUser started', [
+                'user_id' => auth()->id(),
+                'user_email' => auth()->user()?->email,
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        tap(Auth::user(), $logout(...))->delete();
+            Log::debug('[SettingsDeleteUser] deleteUser - validating password', [
+                'user_id' => auth()->id(),
+                'has_password' => !empty($this->password),
+            ]);
 
-        $this->redirect('/', navigate: true);
+            $this->validate([
+                'password' => ['required', 'string', 'current_password'],
+            ]);
+
+            Log::debug('[SettingsDeleteUser] deleteUser - validation passed', [
+                'user_id' => auth()->id(),
+            ]);
+
+            $user = Auth::user();
+            Log::info('[SettingsDeleteUser] deleteUser - deleting user account', [
+                'user_id' => $user->id,
+                'user_email' => $user->email,
+            ]);
+
+            tap($user, $logout(...))->delete();
+
+            Log::info('[SettingsDeleteUser] deleteUser - user account deleted successfully', [
+                'deleted_user_id' => $user->id,
+                'deleted_user_email' => $user->email,
+            ]);
+
+            $this->redirect('/', navigate: true);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[SettingsDeleteUser] deleteUser - validation failed', [
+                'user_id' => auth()->id(),
+                'errors' => $e->errors(),
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('[SettingsDeleteUser] deleteUser failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 }; ?>
 

@@ -1,15 +1,14 @@
 <?php
 
 use App\Models\Event;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Volt\Component;
-use Livewire\WithFileUploads;
 use Livewire\WithPagination;
 
 new class extends Component {
     use WithPagination;
-    use WithFileUploads;
 
     public bool $showForm = false;
     public ?Event $editingEvent = null;
@@ -18,7 +17,6 @@ new class extends Component {
     public string $start_date = '';
     public string $end_date = '';
     public bool $is_active = true;
-    public $thumbnail = null;
     public ?string $existingThumbnailUrl = null;
 
     /**
@@ -26,11 +24,34 @@ new class extends Component {
      */
     private function sanitizeInput(?string $value): ?string
     {
+        Log::debug('[AdminEvents] sanitizeInput called', [
+            'user_id' => auth()->id(),
+            'input_value' => $value,
+            'input_length' => $value ? strlen($value) : 0,
+            'timestamp' => now()->toIso8601String(),
+        ]);
+
         if (empty($value)) {
+            Log::debug('[AdminEvents] sanitizeInput - empty value, returning null', [
+                'user_id' => auth()->id(),
+            ]);
             return null;
         }
+
+        $originalLength = strlen($value);
         $sanitized = preg_replace('/[^a-zA-Z0-9\-]/', '', $value);
-        return $sanitized === '' ? null : $sanitized;
+        $sanitizedLength = strlen($sanitized);
+        $result = $sanitized === '' ? null : $sanitized;
+
+        Log::debug('[AdminEvents] sanitizeInput completed', [
+            'user_id' => auth()->id(),
+            'original_length' => $originalLength,
+            'sanitized_length' => $sanitizedLength,
+            'characters_removed' => $originalLength - $sanitizedLength,
+            'result' => $result,
+        ]);
+
+        return $result;
     }
 
     /**
@@ -41,13 +62,33 @@ new class extends Component {
         try {
             Log::debug('[AdminEvents] resetForm started', [
                 'user_id' => auth()->id(),
+                'current_state' => [
+                    'showForm' => $this->showForm,
+                    'editingEvent_id' => $this->editingEvent?->id,
+                    'name' => $this->name,
+                    'location' => $this->location,
+                    'start_date' => $this->start_date,
+                    'end_date' => $this->end_date,
+                    'is_active' => $this->is_active,
+                    'existingThumbnailUrl' => $this->existingThumbnailUrl,
+                ],
                 'timestamp' => now()->toIso8601String(),
             ]);
 
-            $this->reset(['name', 'location', 'start_date', 'end_date', 'is_active', 'editingEvent', 'showForm', 'thumbnail', 'existingThumbnailUrl']);
+            $this->reset(['name', 'location', 'start_date', 'end_date', 'is_active', 'editingEvent', 'showForm', 'existingThumbnailUrl']);
 
             Log::debug('[AdminEvents] resetForm completed successfully', [
                 'user_id' => auth()->id(),
+                'reset_state' => [
+                    'showForm' => $this->showForm,
+                    'editingEvent' => $this->editingEvent === null,
+                    'name' => $this->name,
+                    'location' => $this->location,
+                    'start_date' => $this->start_date,
+                    'end_date' => $this->end_date,
+                    'is_active' => $this->is_active,
+                    'existingThumbnailUrl' => $this->existingThumbnailUrl,
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('[AdminEvents] resetForm failed', [
@@ -77,6 +118,8 @@ new class extends Component {
 
             Log::info('[AdminEvents] createEvent completed successfully', [
                 'user_id' => auth()->id(),
+                'showForm' => $this->showForm,
+                'editingEvent' => $this->editingEvent === null,
             ]);
         } catch (\Exception $e) {
             Log::error('[AdminEvents] createEvent failed', [
@@ -102,6 +145,20 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
+            Log::debug('[AdminEvents] editEvent - loading event data', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+                'event_data' => [
+                    'name' => $event->name,
+                    'location' => $event->location,
+                    'start_date' => $event->start_date->format('Y-m-d'),
+                    'end_date' => $event->end_date->format('Y-m-d'),
+                    'is_active' => $event->is_active,
+                    'thumbnail_path' => $event->thumbnail_path,
+                    'thumbnail_url' => $event->thumbnail_url,
+                ],
+            ]);
+
             $this->editingEvent = $event;
             // Load event data without sanitization
             $this->name = $event->name;
@@ -109,13 +166,21 @@ new class extends Component {
             $this->start_date = $event->start_date->format('Y-m-d');
             $this->end_date = $event->end_date->format('Y-m-d');
             $this->is_active = $event->is_active;
-            $this->thumbnail = null;
             $this->existingThumbnailUrl = $event->thumbnail_url;
             $this->showForm = true;
 
             Log::info('[AdminEvents] editEvent completed successfully', [
                 'user_id' => auth()->id(),
                 'event_id' => $event->id,
+                'loaded_data' => [
+                    'name' => $this->name,
+                    'location' => $this->location,
+                    'start_date' => $this->start_date,
+                    'end_date' => $this->end_date,
+                    'is_active' => $this->is_active,
+                    'existingThumbnailUrl' => $this->existingThumbnailUrl,
+                    'showForm' => $this->showForm,
+                ],
             ]);
         } catch (\Exception $e) {
             Log::error('[AdminEvents] editEvent failed', [
@@ -162,10 +227,34 @@ new class extends Component {
                 'is_active' => ['boolean'],
             ];
 
+            // Get the request to access uploaded file
+            $request = request();
+
+            Log::debug('[AdminEvents] saveEvent - checking for file upload', [
+                'user_id' => auth()->id(),
+                'has_file' => $request->hasFile('thumbnail'),
+                'all_files' => array_keys($request->allFiles()),
+                'request_method' => $request->method(),
+                'content_type' => $request->header('Content-Type'),
+            ]);
+
             // Add thumbnail validation only if uploading new image
-            if ($this->thumbnail) {
+            if ($request->hasFile('thumbnail')) {
+                $file = $request->file('thumbnail');
+                Log::debug('[AdminEvents] saveEvent - file detected', [
+                    'user_id' => auth()->id(),
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_size' => $file->getSize(),
+                    'file_mime_type' => $file->getMimeType(),
+                    'file_extension' => $file->getClientOriginalExtension(),
+                ]);
                 $validationRules['thumbnail'] = ['image', 'mimes:jpg,jpeg,png,webp', 'max:5120']; // 5MB max
             }
+
+            Log::debug('[AdminEvents] saveEvent - validation rules', [
+                'user_id' => auth()->id(),
+                'validation_rules' => $validationRules,
+            ]);
 
             $validated = $this->validate($validationRules);
 
@@ -174,44 +263,93 @@ new class extends Component {
                 'validated_data' => $validated,
             ]);
 
-            // Handle thumbnail upload
+            // Handle thumbnail upload from request
             $thumbnailPath = null;
-            if ($this->thumbnail) {
+            if ($request->hasFile('thumbnail')) {
+                Log::debug('[AdminEvents] saveEvent - processing thumbnail upload', [
+                    'user_id' => auth()->id(),
+                    'is_editing' => $this->editingEvent !== null,
+                    'existing_thumbnail_path' => $this->editingEvent?->thumbnail_path,
+                ]);
+
                 // Delete old thumbnail if updating
                 if ($this->editingEvent && $this->editingEvent->thumbnail_path) {
-                    Storage::disk('public')->delete($this->editingEvent->thumbnail_path);
+                    $deleted = Storage::disk('public')->delete($this->editingEvent->thumbnail_path);
+                    Log::debug('[AdminEvents] saveEvent - old thumbnail deletion', [
+                        'user_id' => auth()->id(),
+                        'old_path' => $this->editingEvent->thumbnail_path,
+                        'deleted' => $deleted,
+                    ]);
                 }
 
                 // Store new thumbnail
-                $thumbnailPath = $this->thumbnail->store('events', 'public');
+                $file = $request->file('thumbnail');
+                $thumbnailPath = $file->store('events', 'public');
                 Log::debug('[AdminEvents] saveEvent - thumbnail uploaded', [
                     'user_id' => auth()->id(),
                     'thumbnail_path' => $thumbnailPath,
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_size' => $file->getSize(),
+                    'storage_disk' => 'public',
+                ]);
+            } else {
+                Log::debug('[AdminEvents] saveEvent - no thumbnail file provided', [
+                    'user_id' => auth()->id(),
                 ]);
             }
 
             // Add thumbnail_path to validated data if uploaded
             if ($thumbnailPath) {
                 $validated['thumbnail_path'] = $thumbnailPath;
+                Log::debug('[AdminEvents] saveEvent - using new thumbnail path', [
+                    'user_id' => auth()->id(),
+                    'thumbnail_path' => $thumbnailPath,
+                ]);
             } elseif ($this->editingEvent && $this->editingEvent->thumbnail_path) {
                 // Preserve existing thumbnail_path when updating without new upload
                 $validated['thumbnail_path'] = $this->editingEvent->thumbnail_path;
+                Log::debug('[AdminEvents] saveEvent - preserving existing thumbnail path', [
+                    'user_id' => auth()->id(),
+                    'existing_thumbnail_path' => $this->editingEvent->thumbnail_path,
+                ]);
             }
 
+            Log::debug('[AdminEvents] saveEvent - final validated data', [
+                'user_id' => auth()->id(),
+                'validated_data' => $validated,
+                'is_editing' => $this->editingEvent !== null,
+            ]);
+
             if ($this->editingEvent) {
+                Log::debug('[AdminEvents] saveEvent - updating existing event', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $this->editingEvent->id,
+                    'update_data' => $validated,
+                ]);
+
                 $this->editingEvent->update($validated);
                 $event = $this->editingEvent;
                 session()->flash('event-updated', 'Event updated successfully!');
+
                 Log::info('[AdminEvents] saveEvent - event updated', [
                     'user_id' => auth()->id(),
                     'event_id' => $event->id,
+                    'updated_fields' => array_keys($validated),
                 ]);
             } else {
+                Log::debug('[AdminEvents] saveEvent - creating new event', [
+                    'user_id' => auth()->id(),
+                    'create_data' => $validated,
+                ]);
+
                 $event = Event::create($validated);
                 session()->flash('event-created', 'Event created successfully!');
+
                 Log::info('[AdminEvents] saveEvent - event created', [
                     'user_id' => auth()->id(),
                     'event_id' => $event->id,
+                    'event_name' => $event->name,
+                    'event_location' => $event->location,
                 ]);
             }
 
@@ -283,8 +421,29 @@ new class extends Component {
 
             // Delete thumbnail if exists
             if ($event->thumbnail_path) {
-                Storage::disk('public')->delete($event->thumbnail_path);
+                Log::debug('[AdminEvents] deleteEvent - deleting thumbnail', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $event->id,
+                    'thumbnail_path' => $event->thumbnail_path,
+                ]);
+                $deleted = Storage::disk('public')->delete($event->thumbnail_path);
+                Log::debug('[AdminEvents] deleteEvent - thumbnail deletion result', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $event->id,
+                    'deleted' => $deleted,
+                ]);
+            } else {
+                Log::debug('[AdminEvents] deleteEvent - no thumbnail to delete', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $event->id,
+                ]);
             }
+
+            Log::debug('[AdminEvents] deleteEvent - deleting event record', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+                'event_name' => $event->name,
+            ]);
 
             $event->delete();
 
@@ -319,6 +478,11 @@ new class extends Component {
                 'timestamp' => now()->toIso8601String(),
             ]);
 
+            Log::debug('[AdminEvents] getEventsProperty - querying events', [
+                'user_id' => auth()->id(),
+                'pagination_per_page' => 10,
+            ]);
+
             $events = Event::withCount(['ticketTypes', 'eventDates'])
                 ->orderBy('start_date', 'desc')
                 ->paginate(10);
@@ -327,6 +491,9 @@ new class extends Component {
                 'user_id' => auth()->id(),
                 'events_count' => $events->count(),
                 'total' => $events->total(),
+                'current_page' => $events->currentPage(),
+                'last_page' => $events->lastPage(),
+                'has_more_pages' => $events->hasMorePages(),
             ]);
 
             return $events;
@@ -371,7 +538,11 @@ new class extends Component {
         <div class="p-6 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 space-y-4">
             <flux:heading size="lg">{{ $editingEvent ? 'Edit Event' : 'Create New Event' }}</flux:heading>
 
-            <form wire:submit="saveEvent" class="space-y-4">
+            <form 
+                wire:submit="saveEvent"
+                class="space-y-4" 
+                enctype="multipart/form-data"
+            >
                 <flux:input
                     wire:model="name"
                     label="Event Name"
@@ -414,8 +585,23 @@ new class extends Component {
                     </label>
                     <input
                         type="file"
-                        wire:model="thumbnail"
+                        name="thumbnail"
                         accept="image/jpeg,image/jpg,image/png,image/webp"
+                        x-on:change="
+                            const file = $event.target.files[0];
+                            const previewContainer = $event.target.parentElement.querySelector('[data-preview]');
+                            const previewImage = $event.target.parentElement.querySelector('[data-preview-image]');
+                            if (file && previewContainer && previewImage) {
+                                const reader = new FileReader();
+                                reader.onload = (e) => {
+                                    previewImage.src = e.target.result;
+                                    previewContainer.classList.remove('hidden');
+                                };
+                                reader.readAsDataURL(file);
+                            } else if (previewContainer) {
+                                previewContainer.classList.add('hidden');
+                            }
+                        "
                         class="block w-full text-sm text-neutral-500 dark:text-neutral-400
                                file:mr-4 file:py-2 file:px-4
                                file:rounded-lg file:border-0
@@ -425,6 +611,10 @@ new class extends Component {
                                dark:file:bg-cyan-900/30 dark:file:text-cyan-300
                                dark:hover:file:bg-cyan-900/50"
                     />
+                    <div data-preview class="mt-4 hidden">
+                        <p class="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Preview:</p>
+                        <img data-preview-image alt="Thumbnail preview" class="max-w-xs rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    </div>
                     @error('thumbnail')
                         <p class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</p>
                     @enderror
@@ -432,12 +622,7 @@ new class extends Component {
                         Accepted formats: JPG, PNG, WebP. Max size: 5MB
                     </p>
 
-                    @if ($thumbnail)
-                        <div class="mt-4">
-                            <p class="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Preview:</p>
-                            <img src="{{ $thumbnail->temporaryUrl() }}" alt="Thumbnail preview" class="max-w-xs rounded-lg border border-neutral-200 dark:border-neutral-700">
-                        </div>
-                    @elseif ($existingThumbnailUrl)
+                    @if ($existingThumbnailUrl)
                         <div class="mt-4">
                             <p class="text-sm text-neutral-600 dark:text-neutral-400 mb-2">Current thumbnail:</p>
                             <img src="{{ $existingThumbnailUrl }}" alt="Current thumbnail" class="max-w-xs rounded-lg border border-neutral-200 dark:border-neutral-700">
@@ -454,6 +639,33 @@ new class extends Component {
                     </flux:button>
                 </div>
             </form>
+
+            <script>
+                // Simple script to ensure Livewire is ready before form submission
+                (function() {
+                    const form = document.querySelector('form[wire\\:submit="saveEvent"]');
+                    if (!form) return;
+                    
+                    // Wait for Livewire to be initialized
+                    function waitForLivewire(callback) {
+                        if (typeof window.Livewire !== 'undefined' && window.Livewire.all().length > 0) {
+                            callback();
+                        } else {
+                            setTimeout(() => waitForLivewire(callback), 50);
+                        }
+                    }
+                    
+                    // Intercept form submission to ensure Livewire is ready
+                    form.addEventListener('submit', function(e) {
+                        if (typeof window.Livewire === 'undefined' || window.Livewire.all().length === 0) {
+                            e.preventDefault();
+                            waitForLivewire(function() {
+                                form.requestSubmit();
+                            });
+                        }
+                    });
+                })();
+            </script>
         </div>
     @endif
 

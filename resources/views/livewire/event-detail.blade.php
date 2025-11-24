@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Event;
+use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 
 new class extends Component {
@@ -8,35 +9,110 @@ new class extends Component {
 
     public function mount(Event $event): void
     {
-        // Ensure event is active or user is admin
-        if (!$event->is_active && !auth()->user()?->hasRole('admin')) {
-            abort(404);
-        }
+        try {
+            Log::info('[EventDetail] mount started', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+                'event_is_active' => $event->is_active,
+                'user_is_admin' => auth()->user()?->hasRole('admin') ?? false,
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        $this->event = $event->load(['eventDates', 'ticketTypes']);
+            // Ensure event is active or user is admin
+            if (!$event->is_active && !auth()->user()?->hasRole('admin')) {
+                Log::warning('[EventDetail] mount - access denied', [
+                    'user_id' => auth()->id(),
+                    'event_id' => $event->id,
+                    'event_is_active' => $event->is_active,
+                    'user_is_admin' => false,
+                ]);
+                abort(404);
+            }
+
+            Log::debug('[EventDetail] mount - loading event relationships', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+            ]);
+
+            $this->event = $event->load(['eventDates', 'ticketTypes']);
+
+            Log::info('[EventDetail] mount completed successfully', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id,
+                'event_dates_count' => $this->event->eventDates->count(),
+                'ticket_types_count' => $this->event->ticketTypes->count(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[EventDetail] mount failed', [
+                'user_id' => auth()->id(),
+                'event_id' => $event->id ?? null,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 
     public function getEventProperty()
     {
-        return $this->event;
+        try {
+            Log::debug('[EventDetail] getEventProperty called', [
+                'user_id' => auth()->id(),
+                'event_id' => $this->event->id,
+            ]);
+
+            return $this->event;
+        } catch (\Exception $e) {
+            Log::error('[EventDetail] getEventProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
     }
 
     public function getArmbandColorClasses(string $color): string
     {
-        $colorMap = [
-            'pink' => 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
-            'purple' => 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
-            'red' => 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-            'blue' => 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-            'green' => 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-            'yellow' => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
-            'orange' => 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-            'teal' => 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
-            'indigo' => 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
-            'violet' => 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200',
-        ];
+        try {
+            Log::debug('[EventDetail] getArmbandColorClasses called', [
+                'user_id' => auth()->id(),
+                'color' => $color,
+            ]);
 
-        return $colorMap[strtolower($color)] ?? 'bg-neutral-100 text-neutral-800 dark:bg-neutral-900 dark:text-neutral-200';
+            $colorMap = [
+                'pink' => 'bg-pink-100 text-pink-800 dark:bg-pink-900 dark:text-pink-200',
+                'purple' => 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
+                'red' => 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+                'blue' => 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+                'green' => 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+                'yellow' => 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+                'orange' => 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
+                'teal' => 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+                'indigo' => 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200',
+                'violet' => 'bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200',
+            ];
+
+            $result = $colorMap[strtolower($color)] ?? 'bg-neutral-100 text-neutral-800 dark:bg-neutral-900 dark:text-neutral-200';
+
+            Log::debug('[EventDetail] getArmbandColorClasses completed', [
+                'user_id' => auth()->id(),
+                'color' => $color,
+                'color_found' => isset($colorMap[strtolower($color)]),
+                'result_classes' => $result,
+            ]);
+
+            return $result;
+        } catch (\Exception $e) {
+            Log::error('[EventDetail] getArmbandColorClasses failed', [
+                'user_id' => auth()->id(),
+                'color' => $color,
+                'error' => $e->getMessage(),
+            ]);
+            return 'bg-neutral-100 text-neutral-800 dark:bg-neutral-900 dark:text-neutral-200';
+        }
     }
 }; ?>
 

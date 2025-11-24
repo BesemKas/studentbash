@@ -1,14 +1,39 @@
 <?php
 
 use App\Models\Event;
+use Illuminate\Support\Facades\Log;
 use Livewire\Volt\Component;
 
 new class extends Component {
     public function getEventsProperty()
     {
-        return Event::where('is_active', true)
-            ->orderBy('start_date', 'desc')
-            ->get();
+        try {
+            Log::debug('[Events] getEventsProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $events = Event::where('is_active', true)
+                ->orderBy('start_date', 'desc')
+                ->get();
+
+            Log::debug('[Events] getEventsProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'events_count' => $events->count(),
+                'event_ids' => $events->pluck('id')->toArray(),
+            ]);
+
+            return $events;
+        } catch (\Exception $e) {
+            Log::error('[Events] getEventsProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
+        }
     }
 }; ?>
 

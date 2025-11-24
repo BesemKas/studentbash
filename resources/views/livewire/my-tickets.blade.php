@@ -19,15 +19,35 @@ new class extends Component {
     public function getTicketsProperty()
     {
         try {
-            return Auth::user()
+            Log::debug('[MyTickets] getTicketsProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $tickets = Auth::user()
                 ->tickets()
                 ->with(['event', 'ticketType', 'eventDate'])
                 ->orderBy('created_at', 'desc')
                 ->paginate(10);
+
+            Log::debug('[MyTickets] getTicketsProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'tickets_count' => $tickets->count(),
+                'total' => $tickets->total(),
+                'current_page' => $tickets->currentPage(),
+                'last_page' => $tickets->lastPage(),
+                'verified_count' => $tickets->where('is_verified', true)->count(),
+                'unverified_count' => $tickets->where('is_verified', false)->count(),
+            ]);
+
+            return $tickets;
         } catch (\Exception $e) {
             Log::error('[MyTickets] getTicketsProperty failed', [
                 'user_id' => auth()->id(),
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
             ]);
             throw $e;
         }
@@ -39,12 +59,30 @@ new class extends Component {
     public function generateQrCodeSvg(string $qrCodeText): string
     {
         try {
+            Log::debug('[MyTickets] generateQrCodeSvg started', [
+                'user_id' => auth()->id(),
+                'qr_code_text_length' => strlen($qrCodeText),
+                'qr_code_text_preview' => substr($qrCodeText, 0, 50),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
             $renderer = new ImageRenderer(new RendererStyle(200), new SvgImageBackEnd());
-            return (new Writer($renderer))->writeString($qrCodeText);
+            $svg = (new Writer($renderer))->writeString($qrCodeText);
+
+            Log::debug('[MyTickets] generateQrCodeSvg completed successfully', [
+                'user_id' => auth()->id(),
+                'svg_length' => strlen($svg),
+            ]);
+
+            return $svg;
         } catch (\Exception $e) {
             Log::error('[MyTickets] generateQrCodeSvg failed', [
                 'user_id' => auth()->id(),
+                'qr_code_text_length' => strlen($qrCodeText),
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
             ]);
             return '';
         }
@@ -55,7 +93,28 @@ new class extends Component {
      */
     public function getHasUnverifiedTicketsProperty(): bool
     {
-        return Auth::user()->tickets()->where('is_verified', false)->exists();
+        try {
+            Log::debug('[MyTickets] getHasUnverifiedTicketsProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $hasUnverified = Auth::user()->tickets()->where('is_verified', false)->exists();
+
+            Log::debug('[MyTickets] getHasUnverifiedTicketsProperty completed', [
+                'user_id' => auth()->id(),
+                'has_unverified_tickets' => $hasUnverified,
+            ]);
+
+            return $hasUnverified;
+        } catch (\Exception $e) {
+            Log::error('[MyTickets] getHasUnverifiedTicketsProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return false;
+        }
     }
 
     /**
@@ -63,7 +122,28 @@ new class extends Component {
      */
     public function getSnapscanUrlProperty(): string
     {
-        return env('SNAPSCAN_PAYMENT_URL', 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ');
+        try {
+            Log::debug('[MyTickets] getSnapscanUrlProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $envUrl = env('SNAPSCAN_PAYMENT_URL');
+            $url = $envUrl ?: 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ';
+
+            Log::debug('[MyTickets] getSnapscanUrlProperty completed', [
+                'user_id' => auth()->id(),
+                'url_from_env' => $envUrl !== null,
+            ]);
+
+            return $url;
+        } catch (\Exception $e) {
+            Log::error('[MyTickets] getSnapscanUrlProperty failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+            ]);
+            return 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ';
+        }
     }
 }; ?>
 

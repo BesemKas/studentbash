@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Livewire\Volt\Component;
@@ -16,23 +17,65 @@ new class extends Component {
     public function updatePassword(): void
     {
         try {
+            Log::info('[SettingsPassword] updatePassword started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            Log::debug('[SettingsPassword] updatePassword - validating input', [
+                'user_id' => auth()->id(),
+                'has_current_password' => !empty($this->current_password),
+                'has_new_password' => !empty($this->password),
+                'has_confirmation' => !empty($this->password_confirmation),
+            ]);
+
             $validated = $this->validate([
                 'current_password' => ['required', 'string', 'current_password'],
                 'password' => ['required', 'string', Password::defaults(), 'confirmed'],
             ]);
+
+            Log::debug('[SettingsPassword] updatePassword - validation passed', [
+                'user_id' => auth()->id(),
+            ]);
+
+            Log::debug('[SettingsPassword] updatePassword - updating password', [
+                'user_id' => auth()->id(),
+            ]);
+
+            Auth::user()->update([
+                'password' => $validated['password'],
+            ]);
+
+            Log::info('[SettingsPassword] updatePassword - password updated successfully', [
+                'user_id' => auth()->id(),
+            ]);
+
+            $this->reset('current_password', 'password', 'password_confirmation');
+
+            $this->dispatch('password-updated');
+
+            Log::info('[SettingsPassword] updatePassword completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
         } catch (ValidationException $e) {
+            Log::warning('[SettingsPassword] updatePassword - validation failed', [
+                'user_id' => auth()->id(),
+                'errors' => $e->errors(),
+            ]);
+
             $this->reset('current_password', 'password', 'password_confirmation');
 
             throw $e;
+        } catch (\Exception $e) {
+            Log::error('[SettingsPassword] updatePassword failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            throw $e;
         }
-
-        Auth::user()->update([
-            'password' => $validated['password'],
-        ]);
-
-        $this->reset('current_password', 'password', 'password_confirmation');
-
-        $this->dispatch('password-updated');
     }
 }; ?>
 

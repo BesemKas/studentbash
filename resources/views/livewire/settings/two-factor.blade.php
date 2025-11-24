@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Log;
 use Laravel\Fortify\Actions\ConfirmTwoFactorAuthentication;
 use Laravel\Fortify\Actions\DisableTwoFactorAuthentication;
 use Laravel\Fortify\Actions\EnableTwoFactorAuthentication;
@@ -35,14 +36,37 @@ new class extends Component {
      */
     public function mount(DisableTwoFactorAuthentication $disableTwoFactorAuthentication): void
     {
-        abort_unless(Features::enabled(Features::twoFactorAuthentication()), Response::HTTP_FORBIDDEN);
+        try {
+            Log::info('[SettingsTwoFactor] mount started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        if (Fortify::confirmsTwoFactorAuthentication() && is_null(auth()->user()->two_factor_confirmed_at)) {
-            $disableTwoFactorAuthentication(auth()->user());
+            abort_unless(Features::enabled(Features::twoFactorAuthentication()), Response::HTTP_FORBIDDEN);
+
+            if (Fortify::confirmsTwoFactorAuthentication() && is_null(auth()->user()->two_factor_confirmed_at)) {
+                Log::debug('[SettingsTwoFactor] mount - disabling unconfirmed 2FA', [
+                    'user_id' => auth()->id(),
+                ]);
+                $disableTwoFactorAuthentication(auth()->user());
+            }
+
+            $this->twoFactorEnabled = auth()->user()->hasEnabledTwoFactorAuthentication();
+            $this->requiresConfirmation = Features::optionEnabled(Features::twoFactorAuthentication(), 'confirm');
+
+            Log::info('[SettingsTwoFactor] mount completed successfully', [
+                'user_id' => auth()->id(),
+                'two_factor_enabled' => $this->twoFactorEnabled,
+                'requires_confirmation' => $this->requiresConfirmation,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SettingsTwoFactor] mount failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
         }
-
-        $this->twoFactorEnabled = auth()->user()->hasEnabledTwoFactorAuthentication();
-        $this->requiresConfirmation = Features::optionEnabled(Features::twoFactorAuthentication(), 'confirm');
     }
 
     /**
@@ -50,15 +74,39 @@ new class extends Component {
      */
     public function enable(EnableTwoFactorAuthentication $enableTwoFactorAuthentication): void
     {
-        $enableTwoFactorAuthentication(auth()->user());
+        try {
+            Log::info('[SettingsTwoFactor] enable started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        if (! $this->requiresConfirmation) {
-            $this->twoFactorEnabled = auth()->user()->hasEnabledTwoFactorAuthentication();
+            $enableTwoFactorAuthentication(auth()->user());
+
+            Log::debug('[SettingsTwoFactor] enable - 2FA enabled', [
+                'user_id' => auth()->id(),
+                'requires_confirmation' => $this->requiresConfirmation,
+            ]);
+
+            if (! $this->requiresConfirmation) {
+                $this->twoFactorEnabled = auth()->user()->hasEnabledTwoFactorAuthentication();
+            }
+
+            $this->loadSetupData();
+
+            $this->showModal = true;
+
+            Log::info('[SettingsTwoFactor] enable completed successfully', [
+                'user_id' => auth()->id(),
+                'two_factor_enabled' => $this->twoFactorEnabled,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SettingsTwoFactor] enable failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
         }
-
-        $this->loadSetupData();
-
-        $this->showModal = true;
     }
 
     /**
@@ -66,12 +114,28 @@ new class extends Component {
      */
     private function loadSetupData(): void
     {
-        $user = auth()->user();
-
         try {
+            Log::debug('[SettingsTwoFactor] loadSetupData started', [
+                'user_id' => auth()->id(),
+            ]);
+
+            $user = auth()->user();
+
             $this->qrCodeSvg = $user?->twoFactorQrCodeSvg();
             $this->manualSetupKey = decrypt($user->two_factor_secret);
-        } catch (Exception) {
+
+            Log::debug('[SettingsTwoFactor] loadSetupData completed successfully', [
+                'user_id' => auth()->id(),
+                'qr_code_svg_length' => strlen($this->qrCodeSvg),
+                'manual_setup_key_length' => strlen($this->manualSetupKey),
+            ]);
+        } catch (Exception $e) {
+            Log::error('[SettingsTwoFactor] loadSetupData failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             $this->addError('setupData', 'Failed to fetch setup data.');
 
             $this->reset('qrCodeSvg', 'manualSetupKey');
@@ -99,13 +163,42 @@ new class extends Component {
      */
     public function confirmTwoFactor(ConfirmTwoFactorAuthentication $confirmTwoFactorAuthentication): void
     {
-        $this->validate();
+        try {
+            Log::info('[SettingsTwoFactor] confirmTwoFactor started', [
+                'user_id' => auth()->id(),
+                'code_length' => strlen($this->code),
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        $confirmTwoFactorAuthentication(auth()->user(), $this->code);
+            $this->validate();
 
-        $this->closeModal();
+            Log::debug('[SettingsTwoFactor] confirmTwoFactor - validation passed', [
+                'user_id' => auth()->id(),
+            ]);
 
-        $this->twoFactorEnabled = true;
+            $confirmTwoFactorAuthentication(auth()->user(), $this->code);
+
+            $this->closeModal();
+
+            $this->twoFactorEnabled = true;
+
+            Log::info('[SettingsTwoFactor] confirmTwoFactor completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::warning('[SettingsTwoFactor] confirmTwoFactor - validation failed', [
+                'user_id' => auth()->id(),
+                'errors' => $e->errors(),
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('[SettingsTwoFactor] confirmTwoFactor failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -113,9 +206,24 @@ new class extends Component {
      */
     public function resetVerification(): void
     {
-        $this->reset('code', 'showVerificationStep');
+        try {
+            Log::debug('[SettingsTwoFactor] resetVerification started', [
+                'user_id' => auth()->id(),
+            ]);
 
-        $this->resetErrorBag();
+            $this->reset('code', 'showVerificationStep');
+
+            $this->resetErrorBag();
+
+            Log::debug('[SettingsTwoFactor] resetVerification completed', [
+                'user_id' => auth()->id(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SettingsTwoFactor] resetVerification failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -123,9 +231,27 @@ new class extends Component {
      */
     public function disable(DisableTwoFactorAuthentication $disableTwoFactorAuthentication): void
     {
-        $disableTwoFactorAuthentication(auth()->user());
+        try {
+            Log::info('[SettingsTwoFactor] disable started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        $this->twoFactorEnabled = false;
+            $disableTwoFactorAuthentication(auth()->user());
+
+            $this->twoFactorEnabled = false;
+
+            Log::info('[SettingsTwoFactor] disable completed successfully', [
+                'user_id' => auth()->id(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SettingsTwoFactor] disable failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -133,18 +259,34 @@ new class extends Component {
      */
     public function closeModal(): void
     {
-        $this->reset(
-            'code',
-            'manualSetupKey',
-            'qrCodeSvg',
-            'showModal',
-            'showVerificationStep',
-        );
+        try {
+            Log::debug('[SettingsTwoFactor] closeModal started', [
+                'user_id' => auth()->id(),
+            ]);
 
-        $this->resetErrorBag();
+            $this->reset(
+                'code',
+                'manualSetupKey',
+                'qrCodeSvg',
+                'showModal',
+                'showVerificationStep',
+            );
 
-        if (! $this->requiresConfirmation) {
-            $this->twoFactorEnabled = auth()->user()->hasEnabledTwoFactorAuthentication();
+            $this->resetErrorBag();
+
+            if (! $this->requiresConfirmation) {
+                $this->twoFactorEnabled = auth()->user()->hasEnabledTwoFactorAuthentication();
+            }
+
+            Log::debug('[SettingsTwoFactor] closeModal completed', [
+                'user_id' => auth()->id(),
+                'two_factor_enabled' => $this->twoFactorEnabled,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SettingsTwoFactor] closeModal failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

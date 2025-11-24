@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Support\Facades\Log;
 use Laravel\Fortify\Actions\GenerateNewRecoveryCodes;
 use Livewire\Attributes\Locked;
 use Livewire\Volt\Component;
@@ -13,7 +14,24 @@ new class extends Component {
      */
     public function mount(): void
     {
-        $this->loadRecoveryCodes();
+        try {
+            Log::debug('[SettingsTwoFactorRecoveryCodes] mount started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $this->loadRecoveryCodes();
+
+            Log::debug('[SettingsTwoFactorRecoveryCodes] mount completed', [
+                'user_id' => auth()->id(),
+                'recovery_codes_count' => count($this->recoveryCodes),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SettingsTwoFactorRecoveryCodes] mount failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -21,9 +39,28 @@ new class extends Component {
      */
     public function regenerateRecoveryCodes(GenerateNewRecoveryCodes $generateNewRecoveryCodes): void
     {
-        $generateNewRecoveryCodes(auth()->user());
+        try {
+            Log::info('[SettingsTwoFactorRecoveryCodes] regenerateRecoveryCodes started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
 
-        $this->loadRecoveryCodes();
+            $generateNewRecoveryCodes(auth()->user());
+
+            $this->loadRecoveryCodes();
+
+            Log::info('[SettingsTwoFactorRecoveryCodes] regenerateRecoveryCodes completed successfully', [
+                'user_id' => auth()->id(),
+                'new_recovery_codes_count' => count($this->recoveryCodes),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[SettingsTwoFactorRecoveryCodes] regenerateRecoveryCodes failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            throw $e;
+        }
     }
 
     /**
@@ -31,16 +68,39 @@ new class extends Component {
      */
     private function loadRecoveryCodes(): void
     {
-        $user = auth()->user();
+        try {
+            Log::debug('[SettingsTwoFactorRecoveryCodes] loadRecoveryCodes started', [
+                'user_id' => auth()->id(),
+            ]);
 
-        if ($user->hasEnabledTwoFactorAuthentication() && $user->two_factor_recovery_codes) {
-            try {
+            $user = auth()->user();
+
+            if ($user->hasEnabledTwoFactorAuthentication() && $user->two_factor_recovery_codes) {
                 $this->recoveryCodes = json_decode(decrypt($user->two_factor_recovery_codes), true);
-            } catch (Exception) {
-                $this->addError('recoveryCodes', 'Failed to load recovery codes');
 
+                Log::debug('[SettingsTwoFactorRecoveryCodes] loadRecoveryCodes completed successfully', [
+                    'user_id' => auth()->id(),
+                    'recovery_codes_count' => count($this->recoveryCodes),
+                ]);
+            } else {
                 $this->recoveryCodes = [];
+
+                Log::debug('[SettingsTwoFactorRecoveryCodes] loadRecoveryCodes - no recovery codes available', [
+                    'user_id' => auth()->id(),
+                    'has_2fa_enabled' => $user->hasEnabledTwoFactorAuthentication(),
+                    'has_recovery_codes' => !empty($user->two_factor_recovery_codes),
+                ]);
             }
+        } catch (Exception $e) {
+            Log::error('[SettingsTwoFactorRecoveryCodes] loadRecoveryCodes failed', [
+                'user_id' => auth()->id(),
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            $this->addError('recoveryCodes', 'Failed to load recovery codes');
+
+            $this->recoveryCodes = [];
         }
     }
 }; ?>

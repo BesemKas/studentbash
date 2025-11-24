@@ -10,11 +10,28 @@ new class extends Component {
     public function getSnapscanUrlProperty(): string
     {
         try {
-            $url = env('SNAPSCAN_PAYMENT_URL', 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ');
+            Log::debug('[HowToPay] getSnapscanUrlProperty started', [
+                'user_id' => auth()->id(),
+                'timestamp' => now()->toIso8601String(),
+            ]);
+
+            $envUrl = env('SNAPSCAN_PAYMENT_URL');
+            $url = $envUrl ?: 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ';
+
+            Log::debug('[HowToPay] getSnapscanUrlProperty completed successfully', [
+                'user_id' => auth()->id(),
+                'url_from_env' => $envUrl !== null,
+                'url_length' => strlen($url),
+            ]);
+
             return $url;
         } catch (\Exception $e) {
             Log::error('[HowToPay] getSnapscanUrlProperty failed', [
+                'user_id' => auth()->id(),
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
             ]);
             return 'https://pos.snapscan.io/qr/p2p/jano-louw?act=pay&token=Li1zNZ';
         }
