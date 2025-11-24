@@ -1007,7 +1007,7 @@ new class extends Component {
                 <div class="p-4 bg-neutral-50 dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700">
                     <flux:checkbox
                         wire:model="acceptedTerms"
-                        label="I agree to the Age Verification Policy"
+                        label="I agree to the Terms and Conditions, Privacy Policy, and Age Verification Policy"
                         required
                     />
                     <flux:text class="text-xs text-neutral-600 dark:text-neutral-400 mt-2 block">
@@ -1017,10 +1017,19 @@ new class extends Component {
                             <li>Minors (under 18) are not permitted to purchase adult-only tickets</li>
                             <li>Minors may not purchase alcohol or access age-restricted areas</li>
                             <li>Providing false information may result in ticket cancellation</li>
+                            <li>You have read and agree to all terms and policies</li>
                         </ul>
-                        <a href="{{ route('age-verification-policy') }}" target="_blank" class="text-cyan-600 dark:text-cyan-400 hover:underline mt-2 inline-block">
-                            Read full Age Verification Policy →
-                        </a>
+                        <div class="mt-2 space-x-4">
+                            <a href="{{ route('terms-conditions') }}" target="_blank" class="text-cyan-600 dark:text-cyan-400 hover:underline text-xs">
+                                Terms and Conditions →
+                            </a>
+                            <a href="{{ route('privacy-policy') }}" target="_blank" class="text-cyan-600 dark:text-cyan-400 hover:underline text-xs">
+                                Privacy Policy →
+                            </a>
+                            <a href="{{ route('age-verification-policy') }}" target="_blank" class="text-cyan-600 dark:text-cyan-400 hover:underline text-xs">
+                                Age Verification Policy →
+                            </a>
+                        </div>
                     </flux:text>
                 </div>
 

@@ -33,6 +33,14 @@ Volt::route('how-to-pay', 'how-to-pay')
 Route::view('age-verification-policy', 'policies.age-verification-policy')
     ->name('age-verification-policy');
 
+// Privacy Policy route (public access)
+Route::view('privacy-policy', 'policies.privacy-policy')
+    ->name('privacy-policy');
+
+// Terms and Conditions route (public access)
+Route::view('terms-conditions', 'policies.terms-conditions')
+    ->name('terms-conditions');
+
 // Events browsing route (public access)
 Volt::route('events', 'events')
     ->name('events.index');
